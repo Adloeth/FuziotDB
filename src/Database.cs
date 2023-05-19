@@ -8,15 +8,32 @@ using System.Runtime.CompilerServices;
 
 namespace FuziotDB
 {
+    /// <summary>
+    /// The class that handles all database interactions.
+    /// </summary>
     public class Database : IDisposable
     {
+        #region FIELDS
+
         private Dictionary<Type, DBObject> objects = new Dictionary<Type, DBObject>();
         private string databasePath;
+        private bool cancel;
+
+        #region MULTITHREADING
+
         private DBThread[] threads;
         private ManualResetEvent threadLock;
-        private bool closeThreads;
         private DatabaseAction action;
-        private bool cancel;
+        private ThreadInfoBase currentInfo;
+        private bool closeThreads;
+
+        #endregion
+
+        #endregion
+
+        #region PROPERTIES
+
+        public bool IsMultithreadedCompatible => threads == null;
 
         public bool ActionDone
         {
@@ -31,47 +48,62 @@ namespace FuziotDB
             }
         }
 
+        #endregion
+
+        #region CONSTRUCTORS & DESTRUCTORS
+
         public Database(string databasePath) : this(databasePath, Environment.ProcessorCount) { }
 
         public Database(string databasePath, int threadCount)
         {
             this.databasePath = databasePath;
-            threads = new DBThread[threadCount];
-            threadLock = new ManualResetEvent(false);
 
-            for (int i = 0; i < threadCount; i++)
+            if(threadCount > 0)
             {
-                int index = i;
-                threads[i] = new DBThread(threadLock, () => 
+                threads = new DBThread[threadCount];
+                threadLock = new ManualResetEvent(false);
+
+                for (int i = 0; i < threadCount; i++)
                 {
-                    while(!threads[index].Closing)
+                    int index = i;
+                    threads[i] = new DBThread(threadLock, () => 
                     {
-                        threads[index].IsAvailable = true;
-
-                        threadLock.WaitOne();
-
-                        if(threads[index].Closing)
-                            break;
-
-                        if(action == null)
-                            continue;
-
-                        if(!objects.TryGetValue(action.type, out DBObject obj))
+                        while(!threads[index].Closing)
                         {
-                            Console.WriteLine(string.Concat("Type '", action.type.FullName, "' wasn't registered."));
-                            continue;
+                            threads[index].IsAvailable = true;
+
+                            threadLock.WaitOne();
+
+                            if(threads[index].Closing)
+                                break;
+
+                            if(action == null)
+                                continue;
+
+                            if(!objects.TryGetValue(action.type, out DBObject obj))
+                            {
+                                Console.WriteLine(string.Concat("Type '", action.type.FullName, "' wasn't registered."));
+                                continue;
+                            }
+
+                            if(action is FetchAction fetchAction)
+                                ((FetchAsyncInfo)currentInfo).SetResult(index, obj.Fetch(fetchAction.fetchFunc, fetchAction.fieldsToSearch, threadCount, index));
+
+                            else if(action is CancellableFetchAction cancellableFetchAction)
+                                ((FetchAsyncInfo)currentInfo).SetResult(index, obj.Fetch(cancellableFetchAction.fetchFunc, cancellableFetchAction.fieldsToSearch, threadCount, index, ref cancel));
+
+                            //Console.WriteLine(string.Concat("Thread ", index, " finished with ", ((FetchResult)this.threads[index].Result).result.Count, " objects"));
                         }
-
-                        if(action is FetchAction fetchAction)
-                            this.threads[index].Result = new FetchResult(obj.Fetch(fetchAction.fetchFunc, fetchAction.fieldsToSearch, threadCount, index));
-                            
-                        else if(action is CancellableFetchAction cancellableFetchAction)
-                            this.threads[index].Result = new FetchResult(obj.Fetch(cancellableFetchAction.fetchFunc, cancellableFetchAction.fieldsToSearch, threadCount, index, ref cancel));
-
-                        //Console.WriteLine(string.Concat("Thread ", index, " finished with ", ((FetchResult)this.threads[index].Result).result.Count, " objects"));
-                    }
-                });
-                threads[i].Start();
+                    });
+                    threads[i].Start();
+                }
+            }
+            else
+            {
+                threads = null;
+                threadLock = null;
+                action = null;
+                currentInfo = null;
             }
         }
 
@@ -80,6 +112,12 @@ namespace FuziotDB
             for (int i = 0; i < threads.Length; i++)
                 threads[i].Dispose();
         }
+
+        #endregion
+
+        #region METHODS
+
+        #region UTILITIES
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private DBObject GetObject(Type type)
@@ -90,30 +128,21 @@ namespace FuziotDB
             return obj;
         }
 
-        public DBThreadResult WaitForResult()
+        #region MULTITHREADING
+
+        private ThreadInfoBase StartThreads(DatabaseAction action)
         {
-            DBThreadResult result;
-            while(!ActionDone);
+            if(!IsMultithreadedCompatible)
+                throw new Exception("Cannot use multithreading on this database.");
 
-            if(threads[0].Result is FetchResult)
-                result = new FetchResult();
-            else
-                result = new DBThreadResult();
-
-            for(int i = 0; i < threads.Length; i++)
-            {
-                result.MergeTo(threads[i].Result);
-                threads[i].Result = null;
-            }
-
-            return result;
-        }
-
-        private void StartThreads(DatabaseAction action)
-        {
             while(!ActionDone);
 
             cancel = false;
+
+            if(action is FetchAction)
+                this.currentInfo = new FetchAsyncInfo(threads.Length);
+            else
+                throw new Exception(string.Concat("Action '", action.GetType().Name, "' is unsupported"));
 
             for(int i = 0; i < threads.Length; i++)
                 threads[i].IsAvailable = false;
@@ -122,9 +151,15 @@ namespace FuziotDB
 
             threadLock.Set();
             threadLock.Reset();
+
+            return this.currentInfo;
         }
 
-        #region FETCH DELEGATES
+        #endregion
+
+        #endregion
+
+        #region DELEGATES
 
         /// <summary>
         /// Called when using the fetch method, used to determines whether or not an object should be ignored.
@@ -254,11 +289,11 @@ namespace FuziotDB
         private ReadOnlyCollection<DBVariant[]> Fetch(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => GetObject(type).Fetch(searchFunction, fieldsToSearch);
 
-        public void AsyncFetch<T>(FetchFunc searchFunction, params string[] fieldsToSearch)
-            => StartThreads(new FetchAction(typeof(T), searchFunction, fieldsToSearch));
+        public FetchAsyncInfo FetchAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch)
+            => (FetchAsyncInfo)StartThreads(new FetchAction(typeof(T), searchFunction, fieldsToSearch));
 
-        public void AsyncFetch<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
-            => StartThreads(new CancellableFetchAction(typeof(T), searchFunction, fieldsToSearch));
+        public FetchAsyncInfo FetchAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
+            => (FetchAsyncInfo)StartThreads(new CancellableFetchAction(typeof(T), searchFunction, fieldsToSearch));
 
         private List<DBVariant[]> Fetch(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
             => GetObject(type).Fetch(searchFunction, fieldsToSearch, threadCount, threadID);
@@ -288,6 +323,8 @@ namespace FuziotDB
             return obj.FetchCount(searchFunction, fieldsToSearch);
         }
 
+        #endregion
+    
         #endregion
     }
 }

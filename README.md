@@ -17,7 +17,7 @@ The database can only serialize specific C# data-types, all of which are handled
 - string
 
 I have also made a few custom types for specific uses :
-- ASCIIS (For ASCII String) is a simple wrapper of a C# string but garanties that the string is an ASCII string, because C# strings are UTF-16 (2 bytes per character).
+- ASCIIS (For ASCII String) is a simple wrapper of a C# string but guarantees that the string is an ASCII string, because C# strings are UTF-16 (2 bytes per character).
 - Blob is a wrapper for a byte[] that is serialized as-is (not changed depending on the system's endianness) to handle big sets of bytes or even files.
 - VarUInt and VarInt are experimental, I wanted to see if I could make an integer type that can have any amount of bytes so I could save an RGB value with a 3 byte integer or a 4x4 single floating point matrix with a 64 byte integer.
 
@@ -42,7 +42,7 @@ Everything must be little endian, on big endian systems a conversion must be mad
 
 ## Fetch
 
-In order to retreive information from an object, you can use the `Database.Fetch<T>` methods for synchrnous search or `Database.AsyncFetch<T>` coupled with `Database.WaitForResult()` for multithreaded search. In any case, you must provide a fetch function delegate which receives as an argument an array of `DBVariant`, the first element of this array is the object's index, you can optionally give a set of strings corresponding to the names of the fields you want to retreive, these fields will appear in the variant array in the same order you asked them.
+In order to retreive information from an object, you can use the `Database.Fetch<T>` methods for synchrnous search or `Database.AsyncFetch<T>` coupled with `Database.WaitForResult()` for multithreaded search. In any case, you must provide a fetch function delegate which receives as an argument an array of `DBVariant`. This delegate will be called for every object in the database, the first element of the variant array is the current object's index, you can optionally give a set of strings to the fetch method corresponding to the names of the fields you want to retreive, these fields will appear in the variant array in the same order you asked for them.
 
 ### Example
 
@@ -74,7 +74,7 @@ ReadOnlyCollection<DBVariant[]> result = db.Fetch<Test>((DBVariant[] fields) =>
     return fields[1] < 0.125;
     
 }, 
-//The fields params
+//The requested fields params
 "c", "a", "b");
 ```
 
@@ -88,7 +88,7 @@ Multithreading is simple enough, using the exact same example :
 Database db = new Database("path/to/database/folder/");
 db.Register<Test>();
 
-db.FetchAsync<Test>((DBVariant[] fields) => 
+FetchThreadInfo info = db.FetchAsync<Test>((DBVariant[] fields) => 
 {
     //First element of the array is the object index in the file.
     if(fields[0] < 100ul)
@@ -103,9 +103,7 @@ db.FetchAsync<Test>((DBVariant[] fields) =>
 "c", "a", "b");
 
 //We pause the current thread and wait for the fetch to finish.
-FetchResult fetchResult = (FetchResult)db.WaitForResult();
-
-List<DBVariant[]> data = fetchResult.result;
+DBVariant[][] data = info.WaitForResult();
 ```
 
 This method is drastically faster, you can specify how many thread the database can use when creating it :
