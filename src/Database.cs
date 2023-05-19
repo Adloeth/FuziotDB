@@ -33,7 +33,7 @@ namespace FuziotDB
 
         #region PROPERTIES
 
-        public bool IsMultithreadedCompatible => threads == null;
+        public bool IsMultithreadedCompatible => threads != null;
 
         public bool ActionDone
         {
