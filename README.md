@@ -9,17 +9,17 @@ Obviously I am missing a lot of features most SQL implementations have, but for 
 ## Variants
 
 The database can only serialize specific C# data-types, all of which are handled by the DBVariant class :
-- bool, sbyte and byte
-- ushort, short and half
-- uint, int and single
-- ulong, long and double
-- Guid and Numerics.BigInteger
-- string
+- `bool`, `sbyte` and `byte`
+- `ushort`, `short` and `Half`
+- `uint`, `int` and `Single`
+- `ulong`, `long` and `Double`
+- `Guid` and `Numerics.BigInteger`
+- `string`
 
 I have also made a few custom types for specific uses :
-- ASCIIS (For ASCII String) is a simple wrapper of a C# string but guarantees that the string is an ASCII string, because C# strings are UTF-16 (2 bytes per character).
-- Blob is a wrapper for a byte[] that is serialized as-is (not changed depending on the system's endianness) to handle big sets of bytes or even files.
-- VarUInt and VarInt are experimental, I wanted to see if I could make an integer type that can have any amount of bytes so I could save an RGB value with a 3 byte integer or a 4x4 single floating point matrix with a 64 byte integer.
+- `ASCIIS` (For "ASCII String") is a simple wrapper of a C# string but guarantees that the string is an ASCII string, because C# strings are UTF-16 (2 bytes per character).
+- `Blob` is a wrapper for a `byte[]` that is serialized as-is (not changed depending on the system's endianness) to handle big sets of bytes or even files.
+- `VarUInt` and `VarInt` are experimental, I wanted to see if I could make an integer type that can have any amount of bytes so I could save an RGB value with a 3 byte integer or a 4x4 single floating point matrix with a 64 byte integer.
 
 ## File format
 
