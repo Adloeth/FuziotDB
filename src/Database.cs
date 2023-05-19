@@ -130,6 +130,15 @@ namespace FuziotDB
 
         #region MULTITHREADING
 
+        public Database WaitForActionDone()
+        {
+            if(IsMultithreadedCompatible)
+                while(!ActionDone);
+
+            return this;
+        }
+
+
         private ThreadInfoBase StartThreads(DatabaseAction action)
         {
             if(!IsMultithreadedCompatible)
@@ -139,8 +148,10 @@ namespace FuziotDB
 
             cancel = false;
 
-            if(action is FetchAction)
+            if(action is FetchAction || action is CancellableFetchAction)
                 this.currentInfo = new FetchAsyncInfo(threads.Length);
+            else if(action is FetchCountAction || action is CancellableFetchCountAction)
+                this.currentInfo = new CountAsyncInfo(threads.Length);
             else
                 throw new Exception(string.Concat("Action '", action.GetType().Name, "' is unsupported"));
 
@@ -247,22 +258,12 @@ namespace FuziotDB
         public void Free<T>(ulong id) => Free(typeof(T), id);
 
         private void Free(Type type, ulong id)
-        {
-            if(!objects.TryGetValue(type, out DBObject obj))
-                throw new Exception(string.Concat("Type '", type.FullName, "' wasn't registered."));
-
-            obj.PushFreeID(id);
-        }
+            => WaitForActionDone().GetObject(type).PushFreeID(id);
 
         public void Free<T>(params ulong[] id) => Free(typeof(T), id);
 
-        private void Free(Type type, params ulong[] id)
-        {
-            if(!objects.TryGetValue(type, out DBObject obj))
-                throw new Exception(string.Concat("Type '", type.FullName, "' wasn't registered."));
-
-            obj.PushFreeID(id);
-        }
+        private void Free(Type type, params ulong[] ids)
+            => WaitForActionDone().GetObject(type).PushFreeID(ids);
 
         #endregion
 
@@ -270,12 +271,7 @@ namespace FuziotDB
 
         public void Push<T>(T instance) where T : new() => Push(typeof(T), instance);
         private void Push(Type type, object instance)
-        {
-            if(!objects.TryGetValue(type, out DBObject obj))
-                throw new Exception(string.Concat("Type '", type.FullName, "' wasn't registered."));
-
-            obj.Push(instance);
-        }
+            => WaitForActionDone().GetObject(type).Push(instance);
 
         #endregion
 
@@ -283,11 +279,13 @@ namespace FuziotDB
 
         public ReadOnlyCollection<DBVariant[]> Fetch<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Fetch(typeof(T), searchFunction, fieldsToSearch);
         private ReadOnlyCollection<DBVariant[]> Fetch(Type type, FetchFunc searchFunction, params string[] fieldsToSearch)
-            => GetObject(type).Fetch(searchFunction, fieldsToSearch);
+            => WaitForActionDone().GetObject(type).Fetch(searchFunction, fieldsToSearch);
 
         public ReadOnlyCollection<DBVariant[]> Fetch<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Fetch(typeof(T), searchFunction, fieldsToSearch);
         private ReadOnlyCollection<DBVariant[]> Fetch(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
-            => GetObject(type).Fetch(searchFunction, fieldsToSearch);
+            => WaitForActionDone().GetObject(type).Fetch(searchFunction, fieldsToSearch);
+
+        #region MULTITHREADING
 
         public FetchAsyncInfo FetchAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch)
             => (FetchAsyncInfo)StartThreads(new FetchAction(typeof(T), searchFunction, fieldsToSearch));
@@ -303,25 +301,33 @@ namespace FuziotDB
 
         #endregion
 
+        #endregion
+
         #region COUNT
 
         public long Count<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Count(typeof(T), searchFunction, fieldsToSearch);
         private long Count(Type type, FetchFunc searchFunction, params string[] fieldsToSearch)
-        {
-            if(!objects.TryGetValue(type, out DBObject obj))
-                throw new Exception(string.Concat("Type '", type.FullName, "' wasn't registered."));
-
-            return obj.FetchCount(searchFunction, fieldsToSearch);
-        }
+            => WaitForActionDone().GetObject(type).FetchCount(searchFunction, fieldsToSearch);
 
         public long Count<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Count(typeof(T), searchFunction, fieldsToSearch);
         private long Count(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
-        {
-            if(!objects.TryGetValue(type, out DBObject obj))
-                throw new Exception(string.Concat("Type '", type.FullName, "' wasn't registered."));
+            => WaitForActionDone().GetObject(type).FetchCount(searchFunction, fieldsToSearch);
 
-            return obj.FetchCount(searchFunction, fieldsToSearch);
-        }
+        #region MULTITHREADING
+
+        public CountAsyncInfo CountAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new()
+            => (CountAsyncInfo)StartThreads(new FetchCountAction(typeof(T), searchFunction, fieldsToSearch));
+
+        public CountAsyncInfo CountAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new()
+            => (CountAsyncInfo)StartThreads(new CancellableFetchCountAction(typeof(T), searchFunction, fieldsToSearch));
+
+        private long Count(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
+            => GetObject(type).FetchCount(searchFunction, fieldsToSearch, threadCount, threadID);
+
+        private long Count(Type type, CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID, ref bool cancel)
+            => GetObject(type).FetchCount(searchFunction, fieldsToSearch, threadCount, threadID, ref cancel);
+
+        #endregion
 
         #endregion
     

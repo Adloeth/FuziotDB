@@ -35,4 +35,16 @@ namespace FuziotDB
             this.fieldsToSearch = fieldsToSearch;
         }
     }
+
+    internal class FetchCountAction : FetchAction
+    {
+        public FetchCountAction(Type type, Database.FetchFunc fetchFunc, string[] fieldsToSearch) : base(type, fetchFunc, fieldsToSearch)
+        { }
+    }
+
+    internal class CancellableFetchCountAction : CancellableFetchAction
+    {
+        public CancellableFetchCountAction(Type type, Database.CancellableFetchFunc fetchFunc, string[] fieldsToSearch) : base(type, fetchFunc, fieldsToSearch)
+        { }
+    }
 }

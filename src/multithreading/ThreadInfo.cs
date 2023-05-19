@@ -52,4 +52,36 @@ namespace FuziotDB
             finishedCount++;
         }
     }
+
+    public class CountAsyncInfo : ThreadInfo<long, long>
+    {
+        private long[] results;
+        private int finishedCount;
+
+        public override bool IsFinished => finishedCount == results.Length;
+
+        public CountAsyncInfo(int threadCount)
+        {
+            finishedCount = 0;
+            results = new long[threadCount];
+        }
+
+        public override long WaitForResult()
+        {
+            WaitUntilFinished();
+
+            long result = 0;
+
+            for (int i = 0; i < results.Length; i++)
+                result += results[i];
+
+            return result;
+        }
+
+        internal override void SetResult(int i, long result) 
+        { 
+            results[i] = result; 
+            finishedCount++;
+        }
+    }
 }
