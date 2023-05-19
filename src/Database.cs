@@ -130,6 +130,7 @@ namespace FuziotDB
 
         #region MULTITHREADING
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Database WaitForActionDone()
         {
             if(IsMultithreadedCompatible)
@@ -137,7 +138,6 @@ namespace FuziotDB
 
             return this;
         }
-
 
         private ThreadInfoBase StartThreads(DatabaseAction action)
         {
@@ -190,6 +190,11 @@ namespace FuziotDB
 
         #region REGISTER
 
+        /// <summary>
+        /// Registers an object to the database. This will create a file for each object. Once registered you can use other methods of the database class
+        /// to add, remove, search and count instances in the database.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
         public void Register<T>() where T : new() => Register(typeof(T));
 
         private void Register(Type type)
@@ -255,11 +260,19 @@ namespace FuziotDB
     
         #region FREE
 
+        /// <summary>
+        /// Deletes an object in the database.
+        /// </summary>
+        /// <param name="id">The index of the object to remove.</param>
         public void Free<T>(ulong id) => Free(typeof(T), id);
 
         private void Free(Type type, ulong id)
             => WaitForActionDone().GetObject(type).PushFreeID(id);
 
+        /// <summary>
+        /// Deletes multiple objects in the database.
+        /// </summary>
+        /// <param name="id">The indexes of the objects to remove.</param>
         public void Free<T>(params ulong[] id) => Free(typeof(T), id);
 
         private void Free(Type type, params ulong[] ids)
@@ -269,6 +282,11 @@ namespace FuziotDB
 
         #region PUSH
 
+        /// <summary>
+        /// Adds an object to the database.
+        /// </summary>
+        /// <param name="instance"></param>
+        /// <typeparam name="T"></typeparam>
         public void Push<T>(T instance) where T : new() => Push(typeof(T), instance);
         private void Push(Type type, object instance)
             => WaitForActionDone().GetObject(type).Push(instance);
@@ -277,19 +295,45 @@ namespace FuziotDB
 
         #region FETCH
 
+        /// <summary>
+        /// Synchronously fetch requested fields that passed the test in the search function.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A list of all objects that passed the test in the search function.</returns>
         public ReadOnlyCollection<DBVariant[]> Fetch<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Fetch(typeof(T), searchFunction, fieldsToSearch);
         private ReadOnlyCollection<DBVariant[]> Fetch(Type type, FetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetObject(type).Fetch(searchFunction, fieldsToSearch);
 
+        /// <summary>
+        /// Synchronously fetch requested fields that passed the test in the search function.
+        /// If `cancel` is set to true in the search function, the search will be stopped, mainly useful to search for one object only.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A list of all objects that passed the test in the search function.</returns>
         public ReadOnlyCollection<DBVariant[]> Fetch<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Fetch(typeof(T), searchFunction, fieldsToSearch);
         private ReadOnlyCollection<DBVariant[]> Fetch(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetObject(type).Fetch(searchFunction, fieldsToSearch);
 
         #region MULTITHREADING
 
+        /// <summary>
+        /// Asynchronously fetch requested fields that passed the test in the search function.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A ThreadInfo that can be used to wait for the result.</returns>
         public FetchAsyncInfo FetchAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch)
             => (FetchAsyncInfo)StartThreads(new FetchAction(typeof(T), searchFunction, fieldsToSearch));
 
+        /// <summary>
+        /// Asynchronously fetch requested fields that passed the test in the search function. 
+        /// If `cancel` is set to true in the search function, all threads will stop their search, mainly useful to search for one object only.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A ThreadInfo that can be used to wait for the result.</returns>
         public FetchAsyncInfo FetchAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => (FetchAsyncInfo)StartThreads(new CancellableFetchAction(typeof(T), searchFunction, fieldsToSearch));
 
@@ -305,19 +349,45 @@ namespace FuziotDB
 
         #region COUNT
 
+        /// <summary>
+        /// Synchronously counts objects that passed the test in the search function.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>How many objects passed the test in the search function.</returns>
         public long Count<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Count(typeof(T), searchFunction, fieldsToSearch);
         private long Count(Type type, FetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetObject(type).FetchCount(searchFunction, fieldsToSearch);
 
+        /// <summary>
+        /// Synchronously counts objects that passed the test in the search function.
+        /// If `cancel` is set to true in the search function, the search will be stopped, mainly useful to search for one object only.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>How many objects passed the test in the search function.</returns>
         public long Count<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Count(typeof(T), searchFunction, fieldsToSearch);
         private long Count(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetObject(type).FetchCount(searchFunction, fieldsToSearch);
 
         #region MULTITHREADING
 
+        /// <summary>
+        /// Asynchronously  counts objects that passed the test in the search function.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>How many objects passed the test in the search function.</returns>
         public CountAsyncInfo CountAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new()
             => (CountAsyncInfo)StartThreads(new FetchCountAction(typeof(T), searchFunction, fieldsToSearch));
 
+        /// <summary>
+        /// Asynchronously counts objects that passed the test in the search function.
+        /// If `cancel` is set to true in the search function, all threads will stop their search, mainly useful to search for one object only.
+        /// </summary>
+        /// <param name="searchFunction">Called for each object in the database, if it returns true, the object will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>How many objects passed the test in the search function.</returns>
         public CountAsyncInfo CountAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new()
             => (CountAsyncInfo)StartThreads(new CancellableFetchCountAction(typeof(T), searchFunction, fieldsToSearch));
 
