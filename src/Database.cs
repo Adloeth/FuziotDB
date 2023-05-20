@@ -352,6 +352,9 @@ namespace FuziotDB
                     }
                 }
             }
+        
+            File.Delete(obj.FilePath);
+            File.Move(tmpPath, obj.FilePath);
         }
 
         #endregion

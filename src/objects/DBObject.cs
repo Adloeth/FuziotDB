@@ -364,6 +364,60 @@ namespace FuziotDB
 
         #endregion
 
+        #region PURGE
+
+        /// <summary>
+        /// Go through every freed objects and sets all their data to 0. This clears the data without rewriting the entire file.
+        /// The file size doesn't change.
+        /// </summary>
+        public void PurgeKeep()
+        {
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            {
+                for (int i = 0; i < freeIDs.Count; i++)
+                {
+                    file.Position = (long)(headerSize + freeIDs[i] * objectSize + 1);
+                    file.Write(new byte[objectSize - 1]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Rewrites the entire file removing the freed objects. The file size is reduced.
+        /// </summary>
+        public void Purge()
+        {
+            string newFilePath = string.Concat(filePath, ".tmp");
+
+            using(FileStream oldFile = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                using(FileStream newFile = File.Open(newFilePath, FileMode.Open, FileAccess.Write, FileShare.Write))
+                {
+                    byte[] header = new byte[headerSize];
+                    oldFile.Read(header);
+                    newFile.Write(header);
+
+                    while(oldFile.Position < oldFile.Length)
+                    {
+                        ObjectOptions options = (ObjectOptions)oldFile.ReadByte();
+
+                        if(options.HasFlag(ObjectOptions.Deleted))
+                            continue;
+
+                        oldFile.Position--;
+                        byte[] data = new byte[objectSize];
+                        oldFile.Read(data);
+                        newFile.Write(data);
+                    }
+                }    
+            }
+
+            File.Delete(filePath);
+            File.Move(newFilePath, filePath);
+        }
+
+        #endregion
+
         #region PUSH
 
         /// <summary>
