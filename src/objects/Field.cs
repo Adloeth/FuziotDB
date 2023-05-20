@@ -22,10 +22,11 @@ namespace FuziotDB
 
         public static Field[] FromHeader(byte[] header)
         {
-            List<Field> fields = new List<Field>(header.Length);
+            int count = BitConverter.ToUInt16(header.Extract(0, 2).ToCurrentEndian(true)) + 1;
+            List<Field> fields = new List<Field>(count);
 
-            int offset = 0;
-            while(offset < header.Length)
+            int offset = 2;
+            for(int i = 0; i < count; i++)
             {
                 offset = GetField(header, offset, out Field field);
                 fields.Add(field);
@@ -73,5 +74,8 @@ namespace FuziotDB
 
         public static bool operator ==(Field a, Field b) => a.Equals(b);
         public static bool operator !=(Field a, Field b) => !a.Equals(b);
+
+        public override string ToString()
+            => string.Concat("'", name, "', ", size, ", ", type);
     }
 }

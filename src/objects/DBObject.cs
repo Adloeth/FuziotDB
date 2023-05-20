@@ -14,6 +14,8 @@ namespace FuziotDB
     /// </summary>
     internal class DBObject
     {
+        #region FIELDS
+
         /// <summary>The type of the object serialized.</summary>
         private Type type;
         /// <summary>The size in bytes of the header in the file.</summary>
@@ -31,10 +33,18 @@ namespace FuziotDB
         /// <summary>Whether the object has been registered, in order to avoid using certain methods when the object has been registered.</summary>
         private bool registered;
 
+        #endregion
+
+        #region PROPERTIES
+
         /// <summary>How many fields this object have.</summary>
         public int Count => infos.Count;
         /// <inheritdoc cref="filePath"/>
         public string FilePath => filePath;
+
+        #endregion
+
+        #region CONSTRUCTORS
 
         public DBObject(Type type, string databasePath)
         {
@@ -48,6 +58,31 @@ namespace FuziotDB
                 this.filePath = string.Concat(databasePath, "/", name, ".dbobj");
             else
                 this.filePath = string.Concat(databasePath, name, ".dbobj");
+
+            //There are two bytes at the beginning of the file indicating how many fields there are !
+            headerSize = 2;
+            //There is one byte per object for the ObjectOptions !
+            objectSize = 1;
+        }
+
+        #endregion
+
+        #region REGISTER
+
+        /// <summary>
+        /// Adds a new field to the object and calculates the increment in header and object sizes.
+        /// </summary>
+        /// <param name="info">The reflection information about this field in order to get or set the field's value when serializing or deserializing.</param>
+        /// <param name="field">The database API field information, containing it's type, size and ASCII name.</param>
+        public void Add(System.Reflection.FieldInfo info, Field field)
+        {
+            if(registered)
+                throw new Exception("Cannot add a field to the DBObject when it is registered.");
+
+            infos.Add(new FieldInfo(field, info));
+            //1B Type ; 1B Name size ; xB ASCII Name ; 2B Field size
+            headerSize += 1u + 1u + (uint)field.Name.Length + 2u;
+            this.objectSize += field.Size;
         }
 
         /// <summary>
@@ -72,15 +107,137 @@ namespace FuziotDB
             if(Exists())
                 return;
 
+            if(infos.Count - 1 > ushort.MaxValue)
+                throw new Exception(string.Concat("There can only be a maximum of ", ushort.MaxValue + 1, " fields per objects."));
+
             using(FileStream file = File.Open(filePath, FileMode.CreateNew, FileAccess.Write))
+            {
+                file.Write(BitConverter.GetBytes((ushort)(infos.Count - 1)).ToLittleEndian());
+
                 for(int i = 0; i < infos.Count; i++)
                     file.Write(infos[i].field.CalcHeader());
+            }
         }
+
+        #endregion
+
+        #region FILE UTILITIES
 
         /// <summary>
         /// Checks whether the database file for this object already exists.
         /// </summary>
         public bool Exists() => File.Exists(filePath);
+
+        #endregion
+
+        #region HEADER
+
+        /// <summary>Returns the headers of each fields as specified in the file.</summary>
+        public byte[][] GetFileFieldHeaders(FileStream file)
+        {
+            long curPosition = file.Position;
+            file.Position = 0;
+
+            byte[] fieldCountBytes = new byte[2];
+            file.Read(fieldCountBytes);
+            int fieldCount = BitConverter.ToUInt16(fieldCountBytes.ToCurrentEndian(true)) + 1;
+
+            List<byte[]> headers = new List<byte[]>(fieldCount);
+
+            for (int i = 0; i < fieldCount; i++)
+            {
+                byte type = (byte)file.ReadByte();
+                byte nameSize = (byte)file.ReadByte();
+                byte[] name = new byte[nameSize + 1];
+                file.Read(name);
+                byte[] dataSize = new byte[2];
+                file.Read(dataSize);
+                
+                List<byte> total = new List<byte>(2 + nameSize + 2);
+                total.Add(type);
+                total.Add(nameSize);
+                total.AddRange(name);
+                total.AddRange(dataSize);
+
+                headers.Add(total.ToArray());
+            }
+
+            file.Position = curPosition;
+
+            return headers.ToArray();
+        }
+
+        /// <summary>Returns the header as specified in the file.</summary>
+        public byte[] GetFileFullHeader(FileStream file)
+        {
+            long curPosition = file.Position;
+            file.Position = 0;
+
+            List<byte> fullHeader = new List<byte>();
+
+            byte[] fieldCountBytes = new byte[2];
+            file.Read(fieldCountBytes);
+            int fieldCount = BitConverter.ToUInt16(fieldCountBytes.ToCurrentEndian(true)) + 1;
+
+            fullHeader.AddRange(fieldCountBytes);
+
+            for (int i = 0; i < fieldCount; i++)
+            {
+                byte type = (byte)file.ReadByte();
+                byte nameSize = (byte)file.ReadByte();
+                byte[] name = new byte[nameSize + 1];
+                file.Read(name);
+                byte[] dataSize = new byte[2];
+                file.Read(dataSize);
+                
+                fullHeader.EnsureCapacity(fullHeader.Capacity + 2 + nameSize + 2);
+                fullHeader.Add(type);
+                fullHeader.Add(nameSize);
+                fullHeader.AddRange(name);
+                fullHeader.AddRange(dataSize);
+            }
+
+            file.Position = curPosition;
+
+            return fullHeader.ToArray();
+        }
+
+        /// <summary>Returns the entire header to be written in the file. It is the equivalent of concatenating the results of CalculateCurrentFieldHeaders().</summary>
+        public byte[] CalculateCurrentFullHeader()
+        {
+            byte[][] headers = new byte[infos.Count][];
+            int headerSize = 2;
+
+            for(int i = 0; i < infos.Count; i++)
+            {
+                headers[i] = infos[i].field.CalcHeader();
+                headerSize += headers[i].Length;
+            }
+
+            byte[] result = new byte[headerSize];
+
+            byte[] fieldCountBytes = BitConverter.GetBytes((ushort)(infos.Count - 1)).ToLittleEndian();
+            result[0] = fieldCountBytes[0];
+            result[1] = fieldCountBytes[1];
+
+            int pos = 0;
+            for(int i = 0; i < infos.Count; i++)
+                for (int j = 0; j < headers[i].Length; j++)
+                    result[2 + pos++] = headers[i][j];
+
+            return result;
+        }
+
+        /// <summary>Returns the header of each field in the object.</summary>
+        public byte[][] CalculateCurrentFieldHeaders()
+        {
+            byte[][] result = new byte[infos.Count][];
+
+            for(int i = 0; i < infos.Count; i++)
+                result[i] = infos[i].field.CalcHeader();
+
+            return result;
+        }
 
         /// <summary>
         /// Checks whether the header in the database file is the same as the object's header. 
@@ -88,9 +245,9 @@ namespace FuziotDB
         /// </summary>
         public bool IsHeaderValid()
         {
-            byte[] header = new byte[headerSize];
+            byte[] header;
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
-                file.Read(header, 0, (int)headerSize);
+                header = GetFileFullHeader(file);
 
             Field[] fields = Field.FromHeader(header);
 
@@ -116,21 +273,9 @@ namespace FuziotDB
             return true;
         }
 
-        /// <summary>
-        /// Adds a new field to the object and calculates the increment in header and object sizes.
-        /// </summary>
-        /// <param name="info">The reflection information about this field in order to get or set the field's value when serializing or deserializing.</param>
-        /// <param name="field">The database API field information, containing it's type, size and ASCII name.</param>
-        public void Add(System.Reflection.FieldInfo info, Field field)
-        {
-            if(registered)
-                throw new Exception("Cannot add a field to the DBObject when it is registered.");
+        #endregion
 
-            infos.Add(new FieldInfo(field, info));
-            //1B Type ; 1B Name size ; xB ASCII Name ; 2B Field size
-            headerSize += 1u + 1u + (uint)field.Name.Length + 2u;
-            this.objectSize += field.Size;
-        }
+        #region FREE
 
         /// <summary>
         /// Adds multiple indexes to the queue of available indexes for later allocations to avoid fragmentation.
@@ -142,6 +287,10 @@ namespace FuziotDB
         /// </summary>
         /// <param name="id">An index to push to the queue.</param>
         public void PushFreeID(ulong id) => freeIDs.Add(id);
+
+        #endregion
+
+        #region PUSH
 
         /// <summary>
         /// Provides a position in the file where a new object can be written.
@@ -184,6 +333,9 @@ namespace FuziotDB
                 else
                     offset = (ulong)file.Length;
 
+                //Write default object options
+                file.WriteByte((byte)ObjectOptions.None);
+
                 for(int i = 0; i < infos.Count; i++)
                 {
                     DBVariant variant = DBVariant.FromObject(infos[i].info.GetValue(instance), infos[i].field.Size);
@@ -195,6 +347,10 @@ namespace FuziotDB
 
             return offset;
         }
+
+        #endregion
+
+        #region SET
 
         /// <summary>
         /// Replaces the data of an object given it's index.
@@ -219,6 +375,8 @@ namespace FuziotDB
                 }
             }
         }
+
+        #endregion
 
         #region FETCH UTILITIES
 

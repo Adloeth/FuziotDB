@@ -195,9 +195,21 @@ namespace FuziotDB
         /// to add, remove, search and count instances in the database.
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        public void Register<T>() where T : new() => Register(typeof(T));
+        public void Register<T>() where T : new() => Register(typeof(T), false);
+        /// <summary>
+        /// Registers an object to the database. This will create a file for each object. Once registered you can use other methods of the database class
+        /// to add, remove, search and count instances in the database.
+        /// </summary>
+        /// <param name="upgrade">
+        /// If this object was already registered and the header of the file isn't the same as the object's header (the software was updated and data has 
+        /// been added or removed from the class), setting this to false will generate an error, while setting it to true will rewrite the entire file accounting 
+        /// for the new header. This means that data can be permanently lost of a field was removed, it is your responsibility to use backups if you set this 
+        /// parameter to true.
+        /// </param>
+        /// <typeparam name="T"></typeparam>
+        public void Register<T>(bool upgrade) where T : new() => Register(typeof(T), upgrade);
 
-        private void Register(Type type)
+        private void Register(Type type, bool upgrade)
         {
             DBObject obj = new DBObject(type, databasePath);
             foreach(System.Reflection.FieldInfo info in type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
@@ -245,7 +257,12 @@ namespace FuziotDB
             if(obj.Exists())
             {
                 if(!obj.IsHeaderValid())
-                    throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because it doesn't have the same header signature."));
+                {
+                    if(!upgrade)
+                        throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because it doesn't have the same header signature."));
+                    else
+                        Upgrade(type, obj);
+                }
             }
             else
                 obj.CreateFile();
@@ -254,6 +271,84 @@ namespace FuziotDB
 
             objects.Add(type, obj);
             Console.WriteLine(string.Concat("Type '", type.FullName, "' is registered to the database (with ", obj.Count, " fields) !"));
+        }
+
+        /// <summary>
+        /// Rewrites the entire file adding or removing fields depending on the current type signature.
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="obj"></param>
+        private void Upgrade(Type type, DBObject obj)
+        {
+            string tmpPath = string.Concat(obj.FilePath, ".tmp");
+
+            if(File.Exists(tmpPath))
+                File.Delete(tmpPath);
+
+            byte[][] currentHeaders = obj.CalculateCurrentFieldHeaders();
+            Field[] newFields = Field.FromHeader(obj.CalculateCurrentFullHeader());
+
+            using(FileStream old = File.Open(obj.FilePath, FileMode.Open, FileAccess.Read))
+            {
+                byte[] oldHeader = obj.GetFileFullHeader(old);
+                Field[] oldFields = Field.FromHeader(oldHeader);
+                long oldObjectSize = 1; //First byte is for ObjectOptions
+
+                for (int i = 0; i < oldFields.Length; i++)
+                    oldObjectSize += oldFields[i].Size + 1; //Don't forget that a value of 0 means a length of 1
+
+                old.Position = oldHeader.Length;
+
+                using(FileStream tmp = File.Open(tmpPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+                {
+                    //Write the field count at the beginning of the file.
+                    tmp.Write(BitConverter.GetBytes((ushort)(currentHeaders.Length - 1)).ToLittleEndian());
+
+                    for (int i = 0; i < currentHeaders.Length; i++)
+                        tmp.Write(currentHeaders[i]);
+
+                    while(old.Position < old.Length)
+                    {
+                        //Get the first byte (the object options) to ignore the field if it is a deleted field.
+                        ObjectOptions objectOptions = (ObjectOptions)old.ReadByte();
+
+                        if(objectOptions.HasFlag(ObjectOptions.Deleted))
+                        {
+                            old.Position += oldObjectSize;
+                            continue;
+                        }
+
+                        //Get all the old fields bytes.
+                        byte[][] oldObjectFields = new byte[oldFields.Length][];
+
+                        //Fill them
+                        for (int i = 0; i < oldFields.Length; i++)
+                        {
+                            oldObjectFields[i] = new byte[oldFields[i].Size + 1];
+                            old.Read(oldObjectFields[i]);
+                        }
+
+                        //Check if the new fields were already in the old file, in order to copy them.
+                        for (int i = 0; i < newFields.Length; i++)
+                        {
+                            int fieldIndex = -1;
+                            for (int j = 0; j < oldFields.Length; j++)
+                                if(newFields[i] == oldFields[j])
+                                {
+                                    fieldIndex = j;
+                                    break;
+                                }
+
+                            //If a new field was inserted (the field didn't exist in the old file), the default value will be set (all bytes at 0).
+                            if(fieldIndex == -1)
+                                tmp.Write(new byte[newFields[i].Size + 1]);
+                            //Otherwise, writes the field as in the old file.
+                            else
+                                tmp.Write(oldObjectFields[fieldIndex]);
+                        }
+                    }
+                }
+            }
         }
 
         #endregion
