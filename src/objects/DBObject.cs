@@ -306,13 +306,61 @@ namespace FuziotDB
         /// <summary>
         /// Adds multiple indexes to the queue of available indexes for later allocations to avoid fragmentation.
         /// </summary>
-        /// <param name="id">An array of indexes to push to the queue.</param>
-        public void PushFreeID(params ulong[] id) => freeIDs.AddRange(id);
+        /// <param name="ids">An array of indexes to push to the queue.</param>
+        public void FreeID(params ulong[] ids)
+        {
+            freeIDs.AddRange(ids);
+
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+            {
+                for (int i = 0; i < ids.Length; i++)
+                {
+                    file.Position = (long)(headerSize + ids[i] * objectSize);
+                    ObjectOptions options = (ObjectOptions)file.ReadByte();
+                    file.Position--;
+                    file.WriteByte((byte)(options | ObjectOptions.Deleted));   
+                }
+            }
+        }
         /// <summary>
         /// Adds an index to the queue of available indexes for later allocations to avoid fragmentation.
         /// </summary>
         /// <param name="id">An index to push to the queue.</param>
-        public void PushFreeID(ulong id) => freeIDs.Add(id);
+        public void FreeID(ulong id)
+        {
+            freeIDs.Add(id);
+
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            {
+                file.Position = (long)(headerSize + id * objectSize);
+                ObjectOptions options = (ObjectOptions)file.ReadByte();
+                file.Position--;
+                file.WriteByte((byte)(options | ObjectOptions.Deleted));
+            }
+        }
+
+        /// <summary>
+        /// Search the whole file for objects having the Deleted flag enabled to reconstruct the freeIDs queue.
+        /// </summary>
+        public void GetFreedIDs()
+        {
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                file.Position = headerSize;
+
+                ulong id = 0;
+                while(file.Position < file.Length)
+                {
+                    ObjectOptions options = (ObjectOptions)file.ReadByte();
+
+                    if(options.HasFlag(ObjectOptions.Deleted))
+                        freeIDs.Add(id);
+
+                    file.Position += (long)objectSize - 1;
+                    id++;
+                }
+            }
+        }
 
         #endregion
 

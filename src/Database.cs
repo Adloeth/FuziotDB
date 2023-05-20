@@ -263,8 +263,9 @@ namespace FuziotDB
                     else
                         Upgrade(type, obj);
                 }
-                else
-                    obj.OrderFields();
+
+                obj.OrderFields();
+                obj.GetFreedIDs();
             }
             else
                 obj.CreateFile();
@@ -364,7 +365,7 @@ namespace FuziotDB
         public void Free<T>(ulong id) => Free(typeof(T), id);
 
         private void Free(Type type, ulong id)
-            => WaitForActionDone().GetObject(type).PushFreeID(id);
+            => WaitForActionDone().GetObject(type).FreeID(id);
 
         /// <summary>
         /// Deletes multiple objects in the database.
@@ -373,7 +374,7 @@ namespace FuziotDB
         public void Free<T>(params ulong[] id) => Free(typeof(T), id);
 
         private void Free(Type type, params ulong[] ids)
-            => WaitForActionDone().GetObject(type).PushFreeID(ids);
+            => WaitForActionDone().GetObject(type).FreeID(ids);
 
         #endregion
 
