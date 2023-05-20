@@ -129,8 +129,8 @@ namespace FuziotDB
             if(type == DBType. Int && size == 3 ) return new DBVariant(BitConverter.ToInt32(bytes));
             if(type == DBType. Int && size == 7 ) return new DBVariant(BitConverter.ToInt64(bytes));
             if(type == DBType. Int && size == 15) return new DBVariant(new BigInt(bytes));
-            if(type == DBType.UTF16) return new DBVariant(Encoding.Unicode.GetString(bytes), size);
-            if(type == DBType.ASCII) return new DBVariant(Encoding.ASCII.GetString(bytes), size);
+            if(type == DBType.UTF16) return new DBVariant(Encoding.Unicode.GetString(bytes), size + 1);
+            if(type == DBType.ASCII) return new DBVariant(Encoding.ASCII.GetString(bytes), size + 1);
             if(type == DBType.Float && size == 1) return new DBVariant(BitConverter.ToHalf(bytes));
             if(type == DBType.Float && size == 3) return new DBVariant(BitConverter.ToSingle(bytes));
             if(type == DBType.Float && size == 7) return new DBVariant(BitConverter.ToDouble(bytes));
@@ -153,8 +153,8 @@ namespace FuziotDB
             if(type == DBType. Int && size == 3 ) return new DBVariant(((   int*)bytes)[0]);
             if(type == DBType. Int && size == 7 ) return new DBVariant(((  long*)bytes)[0]);
             if(type == DBType. Int && size == 15) return new DBVariant(((BigInt*)bytes)[0]);
-            if(type == DBType.UTF16) return new DBVariant(Encoding.Unicode.GetString(bytes, size), size);
-            if(type == DBType.ASCII) return new DBVariant(Encoding.ASCII.GetString(bytes, size), size);
+            if(type == DBType.UTF16) return new DBVariant(Encoding.Unicode.GetString(bytes, size + 1), size + 1);
+            if(type == DBType.ASCII) return new DBVariant(Encoding.ASCII.GetString(bytes, size + 1), size + 1);
             if(type == DBType.Float && size == 1) return new DBVariant(((  Half*)bytes)[0]);
             if(type == DBType.Float && size == 3) return new DBVariant((( float*)bytes)[0]);
             if(type == DBType.Float && size == 7) return new DBVariant(((double*)bytes)[0]);
@@ -205,8 +205,8 @@ namespace FuziotDB
             else if(var is  double v11) return BitConverter.GetBytes(v11).ToLittleEndian();
             else if(var is    Guid v12) return v12.ToByteArray().ToLittleEndian();
             else if(var is  BigInt v13) return v13.ToByteArray().ToLittleEndian();
-            else if(var is  string v14) return Encoding.Unicode.GetBytes(v14);
-            else if(var is  ASCIIS v15) return Encoding.ASCII  .GetBytes(v15);
+            else if(var is  string v14) return Encoding.Unicode.GetBytes(v14, 0, size + 1);
+            else if(var is  ASCIIS v15) return Encoding.ASCII  .GetBytes(v15, 0, size + 1);
             else if(var is    Blob v16) return v16;
             else if(var is VarUInt v17) return (byte[])v17;
             else throw new Exception(string.Concat("Invalid variant type '", var.GetType().FullName, "'."));

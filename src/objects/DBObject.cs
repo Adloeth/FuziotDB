@@ -119,6 +119,32 @@ namespace FuziotDB
             }
         }
 
+        /// <summary>
+        /// Order of field in a class shouldn't matter. This method orders the object fields so that it match the fields declared in the header 
+        /// of the file. This way we can trust the fields to be in the right order when serializing/deserializing.
+        /// </summary>
+        public void OrderFields()
+        {
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            {
+                Field[] fields = Field.FromHeader(GetFileFullHeader(file));
+                FieldInfo tmp;
+
+                for (int i = 0; i < infos.Count; i++)
+                {
+                    for (int j = 0; j < fields.Length; j++)
+                    {
+                        if(infos[i].field == fields[j])
+                        {
+                            tmp = infos[j];
+                            infos[j] = infos[i];
+                            infos[i] = tmp;
+                        }
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region FILE UTILITIES
@@ -338,7 +364,7 @@ namespace FuziotDB
 
                 for(int i = 0; i < infos.Count; i++)
                 {
-                    DBVariant variant = DBVariant.FromObject(infos[i].info.GetValue(instance), infos[i].field.Size);
+                    DBVariant variant = DBVariant.FromObject(infos[i].info.GetValue(instance), infos[i].field.Size + 1);
                     file.Write(variant.GetBytes());
                 }
 
@@ -370,7 +396,7 @@ namespace FuziotDB
                 for(int i = 0; i < infos.Count; i++)
                 {
                     object value = infos[i].info.GetValue(instance);
-                    DBVariant variant = DBVariant.FromObject(value, infos[i].field.Size);
+                    DBVariant variant = DBVariant.FromObject(value, infos[i].field.Size + 1);
                     file.Write(variant.GetBytes());
                 }
             }

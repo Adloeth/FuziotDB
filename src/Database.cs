@@ -263,6 +263,8 @@ namespace FuziotDB
                     else
                         Upgrade(type, obj);
                 }
+                else
+                    obj.OrderFields();
             }
             else
                 obj.CreateFile();
@@ -276,8 +278,6 @@ namespace FuziotDB
         /// <summary>
         /// Rewrites the entire file adding or removing fields depending on the current type signature.
         /// </summary>
-        /// <param name="type"></param>
-        /// <param name="obj"></param>
         private void Upgrade(Type type, DBObject obj)
         {
             string tmpPath = string.Concat(obj.FilePath, ".tmp");
@@ -317,6 +317,8 @@ namespace FuziotDB
                             old.Position += oldObjectSize;
                             continue;
                         }
+
+                        tmp.WriteByte((byte)objectOptions);
 
                         //Get all the old fields bytes.
                         byte[][] oldObjectFields = new byte[oldFields.Length][];
