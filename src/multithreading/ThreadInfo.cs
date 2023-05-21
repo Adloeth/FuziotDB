@@ -17,9 +17,9 @@ namespace FuziotDB
         internal abstract void SetResult(int i, ThreadResult result);
     }
 
-    public class FetchAsyncInfo : ThreadInfo<List<DBVariant[]>, List<DBVariant[]>>
+    public class FetchAsyncInfo : ThreadInfo<List<object[]>, List<object[]>>
     {
-        private List<DBVariant[]>[] results;
+        private List<object[]>[] results;
         private int finishedCount;
 
         public override bool IsFinished => finishedCount == results.Length;
@@ -27,10 +27,10 @@ namespace FuziotDB
         public FetchAsyncInfo(int threadCount)
         {
             finishedCount = 0;
-            results = new List<DBVariant[]>[threadCount];
+            results = new List<object[]>[threadCount];
         }
 
-        public override List<DBVariant[]> WaitForResult()
+        public override List<object[]> WaitForResult()
         {
             WaitUntilFinished();
 
@@ -38,7 +38,7 @@ namespace FuziotDB
             for (int i = 0; i < results.Length; i++)
                 size = results[i].Count;
 
-            List<DBVariant[]> result = new List<DBVariant[]>(size);
+            List<object[]> result = new List<object[]>(size);
 
             for (int i = 0; i < results.Length; i++)
                 result.AddRange(results[i]);
@@ -46,7 +46,7 @@ namespace FuziotDB
             return result;
         }
 
-        internal override void SetResult(int i, List<DBVariant[]> result) 
+        internal override void SetResult(int i, List<object[]> result) 
         { 
             results[i] = result; 
             finishedCount++;

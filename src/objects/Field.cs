@@ -5,20 +5,20 @@ namespace FuziotDB
 {
     internal class Field
     {
-        private DBType type;
         private ASCIIS name;
         private ushort size;
+        private ConverterBase converter;
 
-        public Field(DBType type, ASCIIS name, ushort size)
+        public Field(ASCIIS name, ushort size, ConverterBase converter)
         {
-            this.type = type;
             this.name = name;
             this.size = size;
+            this.converter = converter;
         }
 
-        public DBType Type => type;
         public ASCIIS Name => name;
         public ushort Size => size;
+        public ConverterBase Converter => converter;
 
         public static Field[] FromHeader(byte[] header)
         {
@@ -37,25 +37,23 @@ namespace FuziotDB
 
         private static int GetField(byte[] header, int offset, out Field field)
         {
-            DBType type = (DBType)header[offset];
-            int nameSize = header[offset + 1] + 1;
-            byte[] nameBytes = header.Extract(offset + 2, nameSize);
-            ushort size = BitConverter.ToUInt16(header.Extract(offset + 1 + 1 + nameSize, 2).ToCurrentEndian(true));
-            field = new Field(type, new ASCIIS(nameBytes), size);
-            return offset + 1 + 1 + nameSize + 2;
+            int nameSize = header[offset] + 1;
+            byte[] nameBytes = header.Extract(offset + 1, nameSize);
+            ushort size = BitConverter.ToUInt16(header.Extract(offset + 1 + nameSize, 2).ToCurrentEndian(true));
+            field = new Field(new ASCIIS(nameBytes), size, null);
+            return offset + 1 + nameSize + 2;
         }
 
         public byte[] CalcHeader()
         {
-            byte[] result = new byte[1 + 1 + name.Length + 2];
-            result[0] = (byte)type;
-            result[1] = (byte)(name.Length - 1);
+            byte[] result = new byte[1 + name.Length + 2];
+            result[0] = (byte)(name.Length - 1);
             for(int i = 0 ; i < name.Length; i++)
-                result[2 + i] = name[i];
+                result[1 + i] = name[i];
 
             byte[] sizeBytes = BitConverter.GetBytes(size).ToLittleEndian();
-            result[2 + name.Length] = sizeBytes[0];
-            result[2 + name.Length + 1] = sizeBytes[1];
+            result[1 + name.Length] = sizeBytes[0];
+            result[1 + name.Length + 1] = sizeBytes[1];
 
             return result;
         }
@@ -63,19 +61,17 @@ namespace FuziotDB
         public override bool Equals(object obj)
         {            
             if (obj == null || !(obj is Field field))
-            {
                 return false;
-            }
-            
-            return field.name == name && field.size == size && field.type == type;
+                
+            return field.name == name && field.size == size;
         }
         
-        public override int GetHashCode() => HashCode.Combine(name, size, type);
+        public override int GetHashCode() => HashCode.Combine(name, size);
 
         public static bool operator ==(Field a, Field b) => a.Equals(b);
         public static bool operator !=(Field a, Field b) => !a.Equals(b);
 
         public override string ToString()
-            => string.Concat("'", name, "', ", size, ", ", type);
+            => string.Concat("'", name, "', ", size);
     }
 }

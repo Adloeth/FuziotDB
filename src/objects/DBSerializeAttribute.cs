@@ -7,44 +7,50 @@ namespace FuziotDB
     public sealed class DBSerializeAttribute : Attribute
     {
         private ASCIIS alias;
-        private int size;
+        private int length;
         private bool hasSize;
+        private ConverterBase converter;
 
         public ASCIIS Alias => alias;
-        public int Size => size;
+        public int Length => length;
         public bool HasSize => hasSize;
+        public ConverterBase Converter => converter;
 
         public DBSerializeAttribute(string alias = "")
         {
             this.alias = new ASCIIS(alias);
-            this.size = 0;
+            this.length = 0;
             hasSize = false;
         }
 
         public DBSerializeAttribute(int size)
         {
             this.alias = new ASCIIS("");
-            this.size = size;
+            this.length = size;
             hasSize = true;
         }
 
-        public DBSerializeAttribute(string alias, int size)
+        public DBSerializeAttribute(string alias, int length)
         {
             this.alias = new ASCIIS(alias);
-            this.size = size;
+            this.length = length;
+            hasSize = true;
+        }
+
+        public DBSerializeAttribute(string alias, ConverterBase fixedConverter)
+        {
+            this.alias = new ASCIIS(alias);
+            this.length = fixedConverter.Size;
+            this.converter = fixedConverter;
+            hasSize = true;
+        }
+
+        public DBSerializeAttribute(string alias, int length, ConverterBase flexibleConverter)
+        {
+            this.alias = new ASCIIS(alias);
+            this.length = length;
+            this.converter = flexibleConverter;
             hasSize = true;
         }
     }
-
-    /*public interface IDBObject
-    {
-        public uint DBID { get; set; }
-
-        public abstract void Serialize(DBSerializer fields);
-    }
-
-    public interface IDBObject<T> : IDBObject where T : IDBObject<T>
-    {
-        public abstract static void Register(DBRegistry<T> registry);
-    }*/
 }

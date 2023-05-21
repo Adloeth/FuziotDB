@@ -2,7 +2,7 @@ using System;
 
 namespace FuziotDB
 {
-    [Flags] public enum ObjectOptions : byte
+    [Flags] public enum InstanceOptions : byte
     {
         None = 0,
         //Option0 = 1,

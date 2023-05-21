@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace FuziotDB
 {
@@ -35,6 +36,33 @@ namespace FuziotDB
                 Array.Reverse(bytes);
 
             return bytes;
+        }
+
+        public static void ToLittleEndian(ref byte[] bytes)
+        {
+            if(BitConverter.IsLittleEndian)
+                return;
+
+            Array.Reverse(bytes);
+        }
+
+        public static void ToBigEndian(ref byte[] bytes)
+        {
+            if(BitConverter.IsLittleEndian)
+                Array.Reverse(bytes);
+        }
+
+        /// <summary>
+        /// This function will make the byte array to be the same endianness as the system's. But you need to say which endianness your byte array is. 
+        /// If you assume your byte array to be big endian, set 'arrayEndian' parameter to false, otherwise set it to true.
+        /// </summary>
+        /// <param name="bytes"></param>
+        /// <param name="arrayEndian">False if the byte array is big endian, true otherwise.</param>
+        /// <returns></returns>
+        public static void ToCurrentEndian(ref byte[] bytes, bool arrayEndian)
+        {
+            if(BitConverter.IsLittleEndian != arrayEndian)
+                Array.Reverse(bytes);
         }
 
         public static string PascalToSnake(this string str)
@@ -99,5 +127,21 @@ namespace FuziotDB
         };
 
         public static int CountBits(this byte value) => BitCountLookup[value & 0x0F] + BitCountLookup[value >> 4];
+
+        public static unsafe byte[] PtrToArray(byte* ptr, int length)
+        {
+            byte[] result = new byte[length];
+            Marshal.Copy((nint)ptr, result, 0, length);
+            return result;
+        }
+
+        public static byte[] EnsureSize(this byte[] source, int length)
+        {
+            if(source.Length == length) return source;
+
+            byte[] result = new byte[length];
+            Array.Copy(source, result, Math.Min(source.Length, length));
+            return result;
+        }
     }
 }
