@@ -7,18 +7,18 @@ namespace FuziotDB
     {
         private ASCIIS name;
         private ushort size;
-        private TranslatorBase converter;
+        private TranslatorBase translator;
 
-        public Field(ASCIIS name, ushort size, TranslatorBase converter)
+        public Field(ASCIIS name, ushort size, TranslatorBase translator)
         {
             this.name = name;
             this.size = size;
-            this.converter = converter;
+            this.translator = translator;
         }
 
         public ASCIIS Name => name;
         public ushort Size => size;
-        public TranslatorBase Converter => converter;
+        public TranslatorBase Translator => translator;
 
         public static Field[] FromHeader(byte[] header)
         {

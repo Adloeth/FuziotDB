@@ -9,29 +9,29 @@ namespace FuziotDB
 {
     public abstract class TranslatorBase
     {
-        private static readonly Dictionary<Type, TranslatorBase> defaultConverters = new Dictionary<Type, TranslatorBase> 
+        private static readonly Dictionary<Type, TranslatorBase> defaultTranslators = new Dictionary<Type, TranslatorBase> 
         {
-            { typeof(  bool),    BoolConverter.Default },
-            { typeof(  byte),   UInt8Converter.Default },
-            { typeof( sbyte),    Int8Converter.Default },
-            { typeof(ushort),  UInt16Converter.Default },
-            { typeof( short),   Int16Converter.Default },
-            { typeof(  uint),  UInt32Converter.Default },
-            { typeof(   int),   Int32Converter.Default },
-            { typeof( ulong),  UInt64Converter.Default },
-            { typeof(  long),   Int64Converter.Default },
-            { typeof(  Guid),    GuidConverter.Default },
-            { typeof(BigInt),  BigIntConverter.Default },
-            { typeof(  Half), Float16Converter.Default },
-            { typeof( float), Float32Converter.Default },
-            { typeof(double), Float64Converter.Default },
-            { typeof(string),  StringConverter.Default },
-            { typeof(ASCIIS),  ASCIISConverter.Default },
-            { typeof(byte[]), ByteArrConverter.Default }
+            { typeof(  bool),    BoolTranslator.Default },
+            { typeof(  byte),   UInt8Translator.Default },
+            { typeof( sbyte),    Int8Translator.Default },
+            { typeof(ushort),  UInt16Translator.Default },
+            { typeof( short),   Int16Translator.Default },
+            { typeof(  uint),  UInt32Translator.Default },
+            { typeof(   int),   Int32Translator.Default },
+            { typeof( ulong),  UInt64Translator.Default },
+            { typeof(  long),   Int64Translator.Default },
+            { typeof(  Guid),    GuidTranslator.Default },
+            { typeof(BigInt),  BigIntTranslator.Default },
+            { typeof(  Half), Float16Translator.Default },
+            { typeof( float), Float32Translator.Default },
+            { typeof(double), Float64Translator.Default },
+            { typeof(string),  StringTranslator.Default },
+            { typeof(ASCIIS),  ASCIISTranslator.Default },
+            { typeof(byte[]), ByteArrTranslator.Default }
         };
 
-        public static bool TryGetDefaultConverter(Type type, out TranslatorBase converter) 
-            => defaultConverters.TryGetValue(type, out converter);
+        public static bool TryGetDefaultTranslator(Type type, out TranslatorBase translator) 
+            => defaultTranslators.TryGetValue(type, out translator);
 
         private Type type;
         private ushort size;
@@ -42,8 +42,9 @@ namespace FuziotDB
         internal bool EndianSensitive => endianSensitive;
         internal bool IsFlexible => flexibleSize;
 
-        public TranslatorBase(int byteCount, bool endianSensitive)
+        public TranslatorBase(Type type, int byteCount, bool endianSensitive)
         {
+            this.type = type;
             this.endianSensitive = endianSensitive;
             this.flexibleSize = byteCount <= 0;
             
@@ -67,13 +68,13 @@ namespace FuziotDB
 
     public abstract class FlexibleTranslator<T> : TranslatorBase
     {
-        internal override byte[] FixedTranslateFrom(object obj) => throw new Exception("Invalid convert method : this converter has a flexible size, FlexibleConvertFrom() must be called instead.");
-        internal override object FixedTranslateTo(byte[] arr) => throw new Exception("Invalid convert method : this converter has a flexible size, FlexibleConvertTo() must be called instead.");
+        internal override byte[] FixedTranslateFrom(object obj) => throw new Exception("Invalid convert method : this translator has a flexible size, FlexibleConvertFrom() must be called instead.");
+        internal override object FixedTranslateTo(byte[] arr) => throw new Exception("Invalid convert method : this translator has a flexible size, FlexibleConvertTo() must be called instead.");
 
         internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => Serialize((T)obj, size + 1);
         internal override object FlexibleTranslateTo(byte[] arr, ushort size) => (object)Deserialize(arr, size + 1);
 
-        public FlexibleTranslator(bool endianSensitive) : base(-1, endianSensitive) { }
+        public FlexibleTranslator(bool endianSensitive) : base(typeof(T), -1, endianSensitive) { }
 
         public abstract byte[] Serialize(T obj, int length);
         public abstract T Deserialize(byte[] data, int length);
@@ -84,182 +85,182 @@ namespace FuziotDB
         internal override byte[] FixedTranslateFrom(object obj) => Serialize((T)obj);
         internal override object FixedTranslateTo(byte[] arr) => (object)Deserialize(arr);
 
-        internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => throw new Exception("Invalid convert method : this converter has a fixed size, ConvertFrom() must be called instead.");
-        internal override object FlexibleTranslateTo(byte[] arr, ushort size) => throw new Exception("Invalid convert method : this converter has a fixed size, ConvertTo() must be called instead.");
+        internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => throw new Exception("Invalid convert method : this translator has a fixed size, ConvertFrom() must be called instead.");
+        internal override object FlexibleTranslateTo(byte[] arr, ushort size) => throw new Exception("Invalid convert method : this translator has a fixed size, ConvertTo() must be called instead.");
 
-        public FixedTranslator(int byteCount, bool endianSensitive) : base(byteCount, endianSensitive) { }
+        public FixedTranslator(int byteCount, bool endianSensitive) : base(typeof(T), byteCount, endianSensitive) { }
 
         public abstract byte[] Serialize(T obj);
         public abstract T Deserialize(byte[] data);
     }
 
-    #region DEFAULT CONVERTERS
+    #region DEFAULT TRANSLATORS
 
-    public sealed class BoolConverter : FixedTranslator<bool>
+    public sealed class BoolTranslator : FixedTranslator<bool>
     {
-        public static BoolConverter Default => new BoolConverter();
+        public static BoolTranslator Default => new BoolTranslator();
 
-        public BoolConverter() : base(1, true) { }
+        public BoolTranslator() : base(1, true) { }
 
         public override byte[] Serialize(bool obj) => new byte[1] { (byte)(obj ? 0xFF : 0x00) };
         public override bool Deserialize(byte[] data) => DBUtils.CountBits(data[0]) > 4 ? true : false;
     }
 
-    public sealed class UInt8Converter : FixedTranslator<byte>
+    public sealed class UInt8Translator : FixedTranslator<byte>
     {
-        public static UInt8Converter Default => new UInt8Converter();
+        public static UInt8Translator Default => new UInt8Translator();
 
-        public UInt8Converter() : base(1, true) { }
+        public UInt8Translator() : base(1, true) { }
 
         public override byte[] Serialize(byte obj) => new byte[1] { obj };
         public override byte Deserialize(byte[] data) => data[0];
     }
 
-    public sealed class Int8Converter : FixedTranslator<sbyte>
+    public sealed class Int8Translator : FixedTranslator<sbyte>
     {
-        public static Int8Converter Default => new Int8Converter();
+        public static Int8Translator Default => new Int8Translator();
 
-        public Int8Converter() : base(1, true) { }
+        public Int8Translator() : base(1, true) { }
 
         public override byte[] Serialize(sbyte obj) => new byte[1] { (byte)obj };
         public override sbyte Deserialize(byte[] data) => (sbyte)data[0];
     }
 
-    public sealed class UInt16Converter : FixedTranslator<ushort>
+    public sealed class UInt16Translator : FixedTranslator<ushort>
     {
-        public static UInt16Converter Default => new UInt16Converter();
+        public static UInt16Translator Default => new UInt16Translator();
 
-        public UInt16Converter() : base(2, true) { }
+        public UInt16Translator() : base(2, true) { }
 
         public override byte[] Serialize(ushort obj) => BitConverter.GetBytes(obj);
         public override ushort Deserialize(byte[] data) => BitConverter.ToUInt16(data);
     }
 
-    public sealed class Int16Converter : FixedTranslator<short>
+    public sealed class Int16Translator : FixedTranslator<short>
     {
-        public static Int16Converter Default => new Int16Converter();
+        public static Int16Translator Default => new Int16Translator();
 
-        public Int16Converter() : base(2, true) { }
+        public Int16Translator() : base(2, true) { }
 
         public override byte[] Serialize(short obj) => BitConverter.GetBytes(obj);
         public override short Deserialize(byte[] data) => BitConverter.ToInt16(data);
     }
 
-    public sealed class UInt32Converter : FixedTranslator<uint>
+    public sealed class UInt32Translator : FixedTranslator<uint>
     {
-        public static UInt32Converter Default => new UInt32Converter();
+        public static UInt32Translator Default => new UInt32Translator();
 
-        public UInt32Converter() : base(4, true) { }
+        public UInt32Translator() : base(4, true) { }
 
         public override byte[] Serialize(uint obj) => BitConverter.GetBytes(obj);
         public override uint Deserialize(byte[] data) => BitConverter.ToUInt32(data);
     }
 
-    public sealed class Int32Converter : FixedTranslator<int>
+    public sealed class Int32Translator : FixedTranslator<int>
     {
-        public static Int32Converter Default => new Int32Converter();
+        public static Int32Translator Default => new Int32Translator();
 
-        public Int32Converter() : base(4, true) { }
+        public Int32Translator() : base(4, true) { }
 
         public override byte[] Serialize(int obj) => BitConverter.GetBytes(obj);
         public override int Deserialize(byte[] data) => BitConverter.ToInt32(data);
     }
 
-    public sealed class UInt64Converter : FixedTranslator<ulong>
+    public sealed class UInt64Translator : FixedTranslator<ulong>
     {
-        public static UInt64Converter Default => new UInt64Converter();
+        public static UInt64Translator Default => new UInt64Translator();
 
-        public UInt64Converter() : base(8, true) { }
+        public UInt64Translator() : base(8, true) { }
 
         public override byte[] Serialize(ulong obj) => BitConverter.GetBytes(obj);
         public override ulong Deserialize(byte[] data) => BitConverter.ToUInt64(data);
     }
 
-    public sealed class Int64Converter : FixedTranslator<long>
+    public sealed class Int64Translator : FixedTranslator<long>
     {
-        public static Int64Converter Default => new Int64Converter();
+        public static Int64Translator Default => new Int64Translator();
 
-        public Int64Converter() : base(8, true) { }
+        public Int64Translator() : base(8, true) { }
 
         public override byte[] Serialize(long obj) => BitConverter.GetBytes(obj);
         public override long Deserialize(byte[] data) => BitConverter.ToInt64(data);
     }
 
-    public sealed class GuidConverter : FixedTranslator<Guid>
+    public sealed class GuidTranslator : FixedTranslator<Guid>
     {
-        public static GuidConverter Default => new GuidConverter();
+        public static GuidTranslator Default => new GuidTranslator();
 
-        public GuidConverter() : base(16, true) { }
+        public GuidTranslator() : base(16, true) { }
 
         public override byte[] Serialize(Guid obj) => obj.ToByteArray();
         public override Guid Deserialize(byte[] data) => new Guid(data);
     }
 
-    public sealed class BigIntConverter : FixedTranslator<BigInteger>
+    public sealed class BigIntTranslator : FixedTranslator<BigInteger>
     {
-        public static BigIntConverter Default => new BigIntConverter();
+        public static BigIntTranslator Default => new BigIntTranslator();
 
-        public BigIntConverter() : base(16, false) { }
+        public BigIntTranslator() : base(16, false) { }
 
         public override byte[] Serialize(BigInteger obj) => obj.ToByteArray();
         public override BigInteger Deserialize(byte[] data) => new BigInteger(data);
     }
 
-    public sealed class Float16Converter : FixedTranslator<Half>
+    public sealed class Float16Translator : FixedTranslator<Half>
     {
-        public static Float16Converter Default => new Float16Converter();
+        public static Float16Translator Default => new Float16Translator();
 
-        public Float16Converter() : base(2, true) { }
+        public Float16Translator() : base(2, true) { }
 
         public override byte[] Serialize(Half obj) => BitConverter.GetBytes(obj);
         public override Half Deserialize(byte[] data) => BitConverter.ToHalf(data);
     }
 
-    public sealed class Float32Converter : FixedTranslator<float>
+    public sealed class Float32Translator : FixedTranslator<float>
     {
-        public static Float32Converter Default => new Float32Converter();
+        public static Float32Translator Default => new Float32Translator();
 
-        public Float32Converter() : base(4, true) { }
+        public Float32Translator() : base(4, true) { }
 
         public override byte[] Serialize(float obj) => BitConverter.GetBytes(obj);
         public override float Deserialize(byte[] data) => BitConverter.ToSingle(data);
     }
 
-    public sealed class Float64Converter : FixedTranslator<double>
+    public sealed class Float64Translator : FixedTranslator<double>
     {
-        public static Float64Converter Default => new Float64Converter();
+        public static Float64Translator Default => new Float64Translator();
 
-        public Float64Converter() : base(8, true) { }
+        public Float64Translator() : base(8, true) { }
 
         public override byte[] Serialize(double obj) => BitConverter.GetBytes(obj);
         public override double Deserialize(byte[] data) => BitConverter.ToDouble(data);
     }
 
-    public sealed class StringConverter : FlexibleTranslator<string>
+    public sealed class StringTranslator : FlexibleTranslator<string>
     {
-        public static StringConverter Default => new StringConverter();
+        public static StringTranslator Default => new StringTranslator();
 
-        public StringConverter() : base(false) { }
+        public StringTranslator() : base(false) { }
 
         public override byte[] Serialize(string obj, int length) => Encoding.Unicode.GetBytes(obj, 0, length);
         public override string Deserialize(byte[] data, int length) => Encoding.Unicode.GetString(data, 0, length);
     }
 
-    public sealed class ASCIISConverter : FlexibleTranslator<ASCIIS>
+    public sealed class ASCIISTranslator : FlexibleTranslator<ASCIIS>
     {
-        public static ASCIISConverter Default => new ASCIISConverter();
+        public static ASCIISTranslator Default => new ASCIISTranslator();
 
-        public ASCIISConverter() : base(false) { }
+        public ASCIISTranslator() : base(false) { }
 
         public override byte[] Serialize(ASCIIS obj, int length) => Encoding.ASCII.GetBytes(obj, 0, length);
         public override ASCIIS Deserialize(byte[] data, int length) => new ASCIIS(Encoding.ASCII.GetString(data, 0, length));
     }
 
-    public sealed class ByteArrConverter : FlexibleTranslator<byte[]>
+    public sealed class ByteArrTranslator : FlexibleTranslator<byte[]>
     {
-        public static ByteArrConverter Default => new ByteArrConverter();
+        public static ByteArrTranslator Default => new ByteArrTranslator();
 
-        public ByteArrConverter() : base(false) { }
+        public ByteArrTranslator() : base(false) { }
 
         public override byte[] Serialize(byte[] obj, int length) => obj.EnsureSize(length);
         public override byte[] Deserialize(byte[] data, int length) => data.EnsureSize(length);

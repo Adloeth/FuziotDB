@@ -6,9 +6,9 @@ I definitly need to do a proper benchmark but with the default settings of SQLit
 
 Obviously I am missing a lot of features most SQL implementations have, but for my current project, I don't need more than saving and fetching.
 
-## Converter
+## Translator
 
-The database serializes and deserializes values using Converters. There are a few default converters for the following C# data-types :
+The database serializes and deserializes values using Translators. There are a few default translators for the following C# data-types :
 - `bool`, `sbyte` and `byte`
 - `ushort`, `short` and `Half`
 - `uint`, `int` and `Single`
@@ -19,9 +19,9 @@ The database serializes and deserializes values using Converters. There are a fe
 I have also made a custom type :
 - `ASCIIS` (For "ASCII String") is a simple wrapper of a C# string but guarantees that the string is an ASCII string, because C# strings are UTF-16 (2 bytes per character).
 
-### Custom Converter
+### Custom Translator
 
-You can serialize any data you want by creating a custom converter inheriting from `Converter<T>` where `T` is the type to (de)serialize. The resulting byte array from the converter **must have a fixed length**. If your type can support multiple possible lengths (like a string, an array or whatever), you can make a converter inheriting from `FlexibleConverter<T>`, in which case the user must specify a length in the `DBSerialize` attribute.
+You can serialize any data you want by creating a custom translator inheriting from `FixedTranslator<T>` where `T` is the type to (de)serialize. The resulting byte array from the translator **must have a fixed length**. If your type can support multiple possible lengths (like a string, an array or whatever), you can make a translator inheriting from `FlexibleTranslator<T>`, in which case the user must specify a length in the `DBSerialize` attribute.
 
 ## File format
 

@@ -25,7 +25,6 @@ namespace FuziotDB
         private ManualResetEvent threadLock;
         private DatabaseAction action;
         private ThreadInfoBase currentInfo;
-        private bool closeThreads;
 
         #endregion
 
@@ -225,23 +224,23 @@ namespace FuziotDB
                     continue;
 
                 Type fieldType = info.FieldType;
-                TranslatorBase converter;
+                TranslatorBase translator;
 
-                if(attribute.Converter == null)
+                if(attribute.Translator == null)
                 {
-                    if(!TranslatorBase.TryGetDefaultConverter(fieldType, out converter))
-                        throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because field '", info.Name, "' type ('", fieldType, "') is not supported by default.\nYou can provide a Converter<T> for custom types."));
+                    if(!TranslatorBase.TryGetDefaultTranslator(fieldType, out translator))
+                        throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because field '", info.Name, "' type ('", fieldType, "') is not supported by default.\nYou can provide a FixedTranslator<T> or FlexibleTranslator<T> for custom types."));
                 }
                 else
-                    converter = attribute.Converter;
+                    translator = attribute.Translator;
 
-                if(!attribute.Converter.ValidType(fieldType))
-                    throw new Exception(string.Concat("The provided converter (", attribute.Converter.GetType().FullName, ") is not compatible with the field type '", fieldType.FullName, "'."));
+                if(!translator.ValidType(fieldType))
+                    throw new Exception(string.Concat("The provided converter (", attribute.Translator.GetType().FullName, ") is not compatible with the field type '", fieldType.FullName, "'."));
 
-                if(attribute.HasSize && !converter.IsFlexible)
+                if(attribute.HasSize && !translator.IsFlexible)
                     throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because field '", info.Name, "' is fixed but has a size attribute set."));
                 
-                if(!attribute.HasSize && converter.IsFlexible)
+                if(!attribute.HasSize && translator.IsFlexible)
                     throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because field '", info.Name, "' is flexible and thus needs it's size attribute to be set."));
 
                 ASCIIS alias = attribute.Alias;
@@ -253,7 +252,7 @@ namespace FuziotDB
                     alias = new ASCIIS(info.Name);
                 }
 
-                Field field = new Field(alias, converter.IsFlexible ? (ushort)(attribute.Length - 1) : converter.Size, converter);
+                Field field = new Field(alias, translator.IsFlexible ? (ushort)(attribute.Length - 1) : translator.Size, translator);
 
                 obj.Add(info, field);
             }

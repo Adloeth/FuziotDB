@@ -170,15 +170,13 @@ namespace FuziotDB
 
             for (int i = 0; i < fieldCount; i++)
             {
-                byte type = (byte)file.ReadByte();
                 byte nameSize = (byte)file.ReadByte();
                 byte[] name = new byte[nameSize + 1];
                 file.Read(name);
                 byte[] dataSize = new byte[2];
                 file.Read(dataSize);
                 
-                List<byte> total = new List<byte>(2 + nameSize + 2);
-                total.Add(type);
+                List<byte> total = new List<byte>(1 + nameSize + 2);
                 total.Add(nameSize);
                 total.AddRange(name);
                 total.AddRange(dataSize);
@@ -207,15 +205,13 @@ namespace FuziotDB
 
             for (int i = 0; i < fieldCount; i++)
             {
-                byte type = (byte)file.ReadByte();
                 byte nameSize = (byte)file.ReadByte();
                 byte[] name = new byte[nameSize + 1];
                 file.Read(name);
                 byte[] dataSize = new byte[2];
                 file.Read(dataSize);
                 
-                fullHeader.EnsureCapacity(fullHeader.Capacity + 2 + nameSize + 2);
-                fullHeader.Add(type);
+                fullHeader.EnsureCapacity(fullHeader.Capacity + 1 + nameSize + 2);
                 fullHeader.Add(nameSize);
                 fullHeader.AddRange(name);
                 fullHeader.AddRange(dataSize);
@@ -467,12 +463,12 @@ namespace FuziotDB
                     object value = infos[i].info.GetValue(instance);
                     byte[] bytes;
 
-                    if(infos[i].field.Converter.IsFlexible)
-                        bytes = infos[i].field.Converter.FlexibleTranslateFrom(value, infos[i].field.Size);
+                    if(infos[i].field.Translator.IsFlexible)
+                        bytes = infos[i].field.Translator.FlexibleTranslateFrom(value, infos[i].field.Size);
                     else
-                        bytes = infos[i].field.Converter.FixedTranslateFrom(value);
+                        bytes = infos[i].field.Translator.FixedTranslateFrom(value);
 
-                    if(infos[i].field.Converter.EndianSensitive)
+                    if(infos[i].field.Translator.EndianSensitive)
                         DBUtils.ToLittleEndian(ref bytes);
 
                     file.Write(bytes);
@@ -508,12 +504,12 @@ namespace FuziotDB
                     object value = infos[i].info.GetValue(instance);
                     byte[] bytes;
 
-                    if(infos[i].field.Converter.IsFlexible)
-                        bytes = infos[i].field.Converter.FlexibleTranslateFrom(value, infos[i].field.Size);
+                    if(infos[i].field.Translator.IsFlexible)
+                        bytes = infos[i].field.Translator.FlexibleTranslateFrom(value, infos[i].field.Size);
                     else
-                        bytes = infos[i].field.Converter.FixedTranslateFrom(value);
+                        bytes = infos[i].field.Translator.FixedTranslateFrom(value);
 
-                    if(infos[i].field.Converter.EndianSensitive)
+                    if(infos[i].field.Translator.EndianSensitive)
                         DBUtils.ToLittleEndian(ref bytes);
 
                     file.Write(bytes);
@@ -532,12 +528,13 @@ namespace FuziotDB
         {
             public long offset;
             public ushort size;
-            public TranslatorBase converter;
+            public TranslatorBase translator;
 
-            public FetchField(long offset, ushort size, TranslatorBase converter)
+            public FetchField(long offset, ushort size, TranslatorBase translator)
             {
                 this.offset = offset;
                 this.size = size;
+                this.translator = translator;
             }
         }
 
@@ -559,7 +556,7 @@ namespace FuziotDB
                 {
                     if(infos[j].field.Name == fieldsToSearch[i])
                     {
-                        fetchFields[i] = new FetchField(offset, infos[j].field.Size, infos[j].field.Converter);
+                        fetchFields[i] = new FetchField(offset, infos[j].field.Size, infos[j].field.Translator);
                         setted = true;
                         break;
                     }
@@ -594,10 +591,10 @@ namespace FuziotDB
             {
                 byte[] fieldBytes = instanceBytes.Extract(fetchFields[i].offset, fetchFields[i].size);
 
-                if(fetchFields[i].converter.EndianSensitive)
+                if(fetchFields[i].translator.EndianSensitive)
                     DBUtils.ToCurrentEndian(fieldBytes, true);
 
-                values[i + 1] = fetchFields[i].converter.FixedTranslateTo(fieldBytes);
+                values[i + 1] = fetchFields[i].translator.FixedTranslateTo(fieldBytes);
             }
 
             return values;
