@@ -9,12 +9,12 @@ namespace FuziotDB
         private ASCIIS alias;
         private int length;
         private bool hasSize;
-        private ConverterBase converter;
+        private TranslatorBase converter;
 
         public ASCIIS Alias => alias;
         public int Length => length;
         public bool HasSize => hasSize;
-        public ConverterBase Converter => converter;
+        public TranslatorBase Converter => converter;
 
         public DBSerializeAttribute(string alias = "")
         {
@@ -37,7 +37,7 @@ namespace FuziotDB
             hasSize = true;
         }
 
-        public DBSerializeAttribute(string alias, ConverterBase fixedConverter)
+        public DBSerializeAttribute(string alias, TranslatorBase fixedConverter)
         {
             this.alias = new ASCIIS(alias);
             this.length = fixedConverter.Size;
@@ -45,7 +45,7 @@ namespace FuziotDB
             hasSize = true;
         }
 
-        public DBSerializeAttribute(string alias, int length, ConverterBase flexibleConverter)
+        public DBSerializeAttribute(string alias, int length, TranslatorBase flexibleConverter)
         {
             this.alias = new ASCIIS(alias);
             this.length = length;

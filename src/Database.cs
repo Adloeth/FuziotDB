@@ -225,11 +225,11 @@ namespace FuziotDB
                     continue;
 
                 Type fieldType = info.FieldType;
-                ConverterBase converter;
+                TranslatorBase converter;
 
                 if(attribute.Converter == null)
                 {
-                    if(!ConverterBase.TryGetDefaultConverter(fieldType, out converter))
+                    if(!TranslatorBase.TryGetDefaultConverter(fieldType, out converter))
                         throw new Exception(string.Concat("Cannot serialize type '", type.FullName, "' because field '", info.Name, "' type ('", fieldType, "') is not supported by default.\nYou can provide a Converter<T> for custom types."));
                 }
                 else

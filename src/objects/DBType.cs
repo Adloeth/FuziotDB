@@ -468,9 +468,9 @@ namespace FuziotDB
                     byte[] bytes;
 
                     if(infos[i].field.Converter.IsFlexible)
-                        bytes = infos[i].field.Converter.FlexibleConvertFrom(value, infos[i].field.Size);
+                        bytes = infos[i].field.Converter.FlexibleTranslateFrom(value, infos[i].field.Size);
                     else
-                        bytes = infos[i].field.Converter.ConvertFrom(value);
+                        bytes = infos[i].field.Converter.FixedTranslateFrom(value);
 
                     if(infos[i].field.Converter.EndianSensitive)
                         DBUtils.ToLittleEndian(ref bytes);
@@ -509,9 +509,9 @@ namespace FuziotDB
                     byte[] bytes;
 
                     if(infos[i].field.Converter.IsFlexible)
-                        bytes = infos[i].field.Converter.FlexibleConvertFrom(value, infos[i].field.Size);
+                        bytes = infos[i].field.Converter.FlexibleTranslateFrom(value, infos[i].field.Size);
                     else
-                        bytes = infos[i].field.Converter.ConvertFrom(value);
+                        bytes = infos[i].field.Converter.FixedTranslateFrom(value);
 
                     if(infos[i].field.Converter.EndianSensitive)
                         DBUtils.ToLittleEndian(ref bytes);
@@ -532,9 +532,9 @@ namespace FuziotDB
         {
             public long offset;
             public ushort size;
-            public ConverterBase converter;
+            public TranslatorBase converter;
 
-            public FetchField(long offset, ushort size, ConverterBase converter)
+            public FetchField(long offset, ushort size, TranslatorBase converter)
             {
                 this.offset = offset;
                 this.size = size;
@@ -597,7 +597,7 @@ namespace FuziotDB
                 if(fetchFields[i].converter.EndianSensitive)
                     DBUtils.ToCurrentEndian(fieldBytes, true);
 
-                values[i + 1] = fetchFields[i].converter.ConvertTo(fieldBytes);
+                values[i + 1] = fetchFields[i].converter.FixedTranslateTo(fieldBytes);
             }
 
             return values;
