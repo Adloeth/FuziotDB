@@ -425,8 +425,6 @@ namespace FuziotDB
         /// </summary>
         public void GetFreedIDs()
         {
-            Console.WriteLine("Instance size: " + instanceSize);
-            Console.WriteLine("Header size: " + headerSize);
             using(FileStream file = OpenFileRead())
             {
                 file.Position = headerSize;
@@ -439,7 +437,6 @@ namespace FuziotDB
                     if(options.HasFlag(InstanceOptions.Deleted))
                     {
                         freeIDs.Add(id);
-                        Console.WriteLine("Free ID index: " + (file.Position - 1));
                     }
 
                     file.Position += (long)instanceSize - 1;
@@ -447,12 +444,6 @@ namespace FuziotDB
                 }
             }
             ReleaseRead();
-
-            Console.WriteLine("There are " + freeIDs.Count + " free ids.");
-            for (int i = 0; i < freeIDs.Count; i++)
-            {
-                Console.WriteLine(freeIDs[i]);
-            }
         }
 
         #endregion
@@ -559,8 +550,6 @@ namespace FuziotDB
                 }
                 else
                     offset = (ulong)file.Length;
-
-                Console.WriteLine(inMiddle + " " + offset);
 
                 //Write default instance options
                 file.WriteByte((byte)InstanceOptions.None);
