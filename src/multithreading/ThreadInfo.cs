@@ -53,6 +53,42 @@ namespace FuziotDB
         }
     }
 
+    public class FetchFullAsyncInfo<T> : ThreadInfo<List<T>, List<T>>
+    {
+        private List<T>[] results;
+        private int finishedCount;
+
+        public override bool IsFinished => finishedCount == results.Length;
+
+        public FetchFullAsyncInfo(int threadCount)
+        {
+            finishedCount = 0;
+            results = new List<T>[threadCount];
+        }
+
+        public override List<T> WaitForResult()
+        {
+            WaitUntilFinished();
+
+            int size = 0;
+            for (int i = 0; i < results.Length; i++)
+                size = results[i].Count;
+
+            List<T> result = new List<T>(size);
+
+            for (int i = 0; i < results.Length; i++)
+                result.AddRange(results[i]);
+
+            return result;
+        }
+
+        internal override void SetResult(int i, List<T> result) 
+        { 
+            results[i] = result; 
+            finishedCount++;
+        }
+    }
+
     public class CountAsyncInfo : ThreadInfo<long, long>
     {
         private long[] results;

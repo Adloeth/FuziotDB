@@ -17,7 +17,7 @@ namespace FuziotDB
 
         private Dictionary<Type, DBType> types = new Dictionary<Type, DBType>();
         private string databasePath;
-        private bool cancel;
+        internal bool cancel;
 
         #region MULTITHREADING
 
@@ -85,12 +85,8 @@ namespace FuziotDB
                                 continue;
                             }
 
-                            if(action is FetchAction fetchAction)
-                                ((FetchAsyncInfo)currentInfo).SetResult(index, obj.Fetch(fetchAction.fetchFunc, fetchAction.fieldsToSearch, threadCount, index));
-
-                            else if(action is CancellableFetchAction cancellableFetchAction)
-                                ((FetchAsyncInfo)currentInfo).SetResult(index, obj.Fetch(cancellableFetchAction.fetchFunc, cancellableFetchAction.fieldsToSearch, threadCount, index, ref cancel));
-
+                            action.Execute(this, threadCount, index, this.currentInfo);
+                            
                             //Console.WriteLine(string.Concat("Thread ", index, " finished with ", ((FetchResult)this.threads[index].Result).result.Count, " objects"));
                         }
                     });
@@ -152,12 +148,7 @@ namespace FuziotDB
 
             cancel = false;
 
-            if(action is FetchAction || action is CancellableFetchAction)
-                this.currentInfo = new FetchAsyncInfo(threads.Length);
-            else if(action is FetchCountAction || action is CancellableFetchCountAction)
-                this.currentInfo = new CountAsyncInfo(threads.Length);
-            else
-                throw new Exception(string.Concat("Action '", action.GetType().Name, "' is unsupported"));
+            this.currentInfo = action.GenerateInfo(threads.Length);
 
             for(int i = 0; i < threads.Length; i++)
                 threads[i].IsAvailable = false;
@@ -189,6 +180,10 @@ namespace FuziotDB
         /// <param name="cancel">When set to true, the whole search is stopped.</param>
         /// <returns>False if the instance should be ignored from the search.</returns>
         public delegate bool CancellableFetchFunc(object[] values, ref bool cancel);
+
+        public delegate bool FetchFunc<T>(T obj);
+
+        public delegate bool CancellableFetchFunc<T>(T obj, ref bool cancel);
 
         #endregion
 
@@ -444,11 +439,63 @@ namespace FuziotDB
         public FetchAsyncInfo FetchAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => (FetchAsyncInfo)StartThreads(new CancellableFetchAction(typeof(T), searchFunction, fieldsToSearch));
 
-        private List<object[]> Fetch(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
+        internal List<object[]> InternalAsyncFetch(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
             => GetDBType(type).Fetch(searchFunction, fieldsToSearch, threadCount, threadID);
 
-        private List<object[]> Fetch(Type type, CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID, ref bool cancel)
+        internal List<object[]> InternalAsyncFetch(Type type, CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
             => GetDBType(type).Fetch(searchFunction, fieldsToSearch, threadCount, threadID, ref cancel);
+
+        #endregion
+
+        #endregion
+
+        #region FULL FETCH
+
+        /// <summary>
+        /// Synchronously fetch requested fields that passed the test in the search function.
+        /// </summary>
+        /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A list of all instances that passed the test in the search function.</returns>
+        public List<T> FetchFull<T>(FetchFunc<T> searchFunction)
+            => WaitForActionDone().GetDBType(typeof(T)).FetchFull<T>(searchFunction);
+
+        /// <summary>
+        /// Synchronously fetch requested fields that passed the test in the search function.
+        /// If `cancel` is set to true in the search function, the search will be stopped, mainly useful to search for one instance only.
+        /// </summary>
+        /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A list of all instances that passed the test in the search function.</returns>
+        public List<T> FetchFull<T>(CancellableFetchFunc<T> searchFunction) 
+            => WaitForActionDone().GetDBType(typeof(T)).FetchFull<T>(searchFunction);
+
+        #region MULTITHREADING
+
+        /// <summary>
+        /// Asynchronously fetch requested fields that passed the test in the search function.
+        /// </summary>
+        /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A ThreadInfo that can be used to wait for the result.</returns>
+        public FetchFullAsyncInfo<T> FetchFullAsync<T>(FetchFunc<T> searchFunction)
+            => (FetchFullAsyncInfo<T>)StartThreads(new FetchFullAction<T>(searchFunction));
+
+        /// <summary>
+        /// Asynchronously fetch requested fields that passed the test in the search function. 
+        /// If `cancel` is set to true in the search function, all threads will stop their search, mainly useful to search for one instance only.
+        /// </summary>
+        /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
+        /// <returns>A ThreadInfo that can be used to wait for the result.</returns>
+        public FetchFullAsyncInfo<T> FetchFullAsync<T>(CancellableFetchFunc<T> searchFunction)
+            => (FetchFullAsyncInfo<T>)StartThreads(new CancellableFetchFullAction<T>(searchFunction));
+
+        internal List<T> InternalAsyncFetchFull<T>(Type type, FetchFunc<T> searchFunction, int threadCount, int threadID)
+            => GetDBType(type).FetchFull<T>(searchFunction, threadCount, threadID);
+
+        internal List<T> InternalAsyncFetchFull<T>(Type type, CancellableFetchFunc<T> searchFunction, int threadCount, int threadID)
+            => GetDBType(type).FetchFull<T>(searchFunction, threadCount, threadID, ref cancel);
 
         #endregion
 
@@ -498,10 +545,10 @@ namespace FuziotDB
         public CountAsyncInfo CountAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => (CountAsyncInfo)StartThreads(new CancellableFetchCountAction(typeof(T), searchFunction, fieldsToSearch));
 
-        private long Count(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
+        internal long InternalAsyncCount(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
             => GetDBType(type).FetchCount(searchFunction, fieldsToSearch, threadCount, threadID);
 
-        private long Count(Type type, CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID, ref bool cancel)
+        internal long InternalAsyncCount(Type type, CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
             => GetDBType(type).FetchCount(searchFunction, fieldsToSearch, threadCount, threadID, ref cancel);
 
         #endregion

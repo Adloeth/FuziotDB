@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
@@ -514,7 +515,7 @@ namespace FuziotDB
         /// </summary>
         /// <param name="offset">The position in bytes where the instance bytes must be written.</param>
         /// <returns>False if there are no position in the middle of the file where data can be written. True otherwise.</returns>
-        private bool Alloc(out ulong id, out ulong offset)
+        private bool Alloc(out ulong id, out long offset)
         {
             if(freeIDs.Count <= 0)
             {
@@ -524,7 +525,7 @@ namespace FuziotDB
             }
 
             id = freeIDs[0];
-            offset = headerSize + id * instanceSize;
+            offset = (long)(headerSize + id * instanceSize);
             freeIDs.RemoveAt(0);
             return true;
         }
@@ -534,22 +535,22 @@ namespace FuziotDB
         /// </summary>
         /// <param name="instance">The type instance, it must have the exact same type as the DBType's type.</param>
         /// <returns>The position in bytes where the instance has been written.</returns>
-        public ulong Push(object instance)
+        public long Push(object instance)
         {
             LockWrite();
-            bool inMiddle = Alloc(out ulong id, out ulong offset);
+            bool inMiddle = Alloc(out ulong id, out long offset);
 
             using(FileStream file = File.Open(filePath, inMiddle ? FileMode.Open : FileMode.Append, FileAccess.Write, FileShare.None))
             {            
                 if(inMiddle)
                 {
-                    if(offset > (ulong)file.Length)
+                    if(offset > file.Length)
                         throw new Exception("Internal error, allocation offset is invalid, fix this");
 
                     file.Position = (long)offset;
                 }
                 else
-                    offset = (ulong)file.Length;
+                    offset = file.Length;
 
                 //Write default instance options
                 file.WriteByte((byte)InstanceOptions.None);
@@ -648,7 +649,7 @@ namespace FuziotDB
 
             for (int i = 0; i < fieldsToSearch.Length; i++)
             {
-                long offset = 0;
+                long offset = 1; // Skip the option byte
                 bool setted = false;
                 for (int j = 0; j < infos.Count; j++)
                 {
@@ -659,7 +660,7 @@ namespace FuziotDB
                         break;
                     }
 
-                    offset += infos[j].field.Size;
+                    offset += infos[j].field.Size + 1;
                 }
 
                 if(!setted)
@@ -682,12 +683,12 @@ namespace FuziotDB
             object[] values = new object[fetchFields.Length + 1];
             values[0] = instanceID;
                     
-            byte[] instanceBytes = new byte[instanceSize];
+            byte[] instanceBytes = new byte[instanceSize - 1];
             file.Read(instanceBytes);
 
             for(int i = 0; i < fetchFields.Length; i++)
             {
-                byte[] fieldBytes = instanceBytes.Extract(fetchFields[i].offset, fetchFields[i].size);
+                byte[] fieldBytes = instanceBytes.Extract(fetchFields[i].offset, fetchFields[i].size + 1);
 
                 if(fetchFields[i].translator.EndianSensitive)
                     DBUtils.ToCurrentEndian(fieldBytes, true);
@@ -753,14 +754,18 @@ namespace FuziotDB
             using(FileStream file = OpenFileRead())
             {
                 result = new List<object[]>((int)((file.Length - (long)headerSize) / (long)instanceSize));
-                long instancePos = headerSize;
+                file.Position = headerSize;
                 ulong instanceID = 0;
 
-                while(instancePos < file.Length)
+                while(file.Position < file.Length)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values))
                         result.Add(values);
@@ -791,16 +796,20 @@ namespace FuziotDB
             using(FileStream file = OpenFileRead())
             {
                 result = new List<object[]>((int)((file.Length - (long)headerSize) / (long)instanceSize));
-                long objectPos = headerSize;
+                file.Position = headerSize;
                 ulong objectID = 0;
                 bool cancel = false;
 
-                while(objectPos < file.Length)
+                while(file.Position < file.Length)
                 {
-                    file.Position = objectPos;
-                    object[] values = GetInstanceFieldValues(file, objectID, fetchFields);
-                    objectPos += (long)instanceSize;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
 
+                    object[] values = GetInstanceFieldValues(file, objectID, fetchFields);
+                    
                     if(searchFunction(values, ref cancel))
                         result.Add(values);
 
@@ -835,11 +844,17 @@ namespace FuziotDB
                 out ulong instanceID, out long instancePos, out long realCount, out long endPos);
                 result = new List<object[]>((int)realCount);
 
+                file.Position = instancePos;
+
                 while(instancePos < endPos)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values))
                         result.Add(values);
@@ -873,15 +888,268 @@ namespace FuziotDB
                 out ulong instanceID, out long instancePos, out long realCount, out long endPos);
 
                 result = new List<object[]>((int)realCount);
+                file.Position = instancePos;
 
                 while(instancePos < endPos)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values, ref cancel))
                         result.Add(values);
+
+                    if(cancel)
+                        break;
+
+                    instanceID++;
+                }
+            }
+            ReleaseRead();
+
+            return result;
+        }
+
+        #endregion
+
+        #region FETCH FULL
+
+        /// <summary>
+        /// Go through the whole file sequencially and for each instance, calls the provided searchFunction to determine whether or not to insert the instance in the result list.
+        /// This function requests all fields and returns an object instance. This method is slower than requesting fields with <see cref="Fetch"/> but you can work directly 
+        /// with C# class instance.
+        /// </summary>
+        /// <param name="searchFunction">A delegate called for each instance, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">The name of the fields to search, this optimises performance and especially memory as you only list the fields you will actively work with. This array can be empty, in which case only the instance index will be given.</param>
+        /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
+        public List<T> FetchFull<T>(Database.FetchFunc<T> searchFunction)
+        {
+            List<T> result = null;
+            using(FileStream file = OpenFileRead())
+            {
+                result = new List<T>((int)((file.Length - (long)headerSize) / (long)instanceSize));
+                ulong instanceID = 0;
+
+                file.Position = headerSize;
+
+                while(file.Position < file.Length)
+                {
+                    T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
+
+                    InstanceOptions options = (InstanceOptions)file.ReadByte();
+
+                    if(options.HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
+                    for(int i = 0; i < infos.Count; i++)
+                    {
+                        byte[] fieldBytes = new byte[infos[i].field.Size + 1];
+                        file.Read(fieldBytes);
+                        
+                        if(infos[i].field.Translator.EndianSensitive)
+                            DBUtils.ToCurrentEndian(fieldBytes, true);
+
+                        object value;
+                        if(infos[i].field.Translator.IsFlexible)
+                            value = infos[i].field.Translator.FlexibleTranslateTo(fieldBytes, infos[i].field.Size);
+                        else
+                            value = infos[i].field.Translator.FixedTranslateTo(fieldBytes);
+                        infos[i].info.SetValue(obj, value);
+                    }
+
+                    if(searchFunction(obj))
+                        result.Add(obj);
+
+                    instanceID++;
+                }
+            }
+            ReleaseRead();
+
+            return result;
+        }
+
+        /// <summary>
+        /// Go through the whole file sequencially and for each instance, calls the provided searchFunction to determine whether or not to insert the instance in the result list.
+        /// The first element of the returned arrays will be the instance index in the file, meaning that you don't have to request any fields. The next elements will be the requested fields.
+        /// Values are provided in the same order as requested fields. For example, asking for fields "c", "a" and "b" will gives the values of each of those fields in the same order.
+        /// <br></br>
+        /// This search can be cancelled, especially useful if you are searching for one and only one instance that you know is unique.
+        /// </summary>
+        /// <param name="searchFunction">A delegate called for each instance, if it returns true, the instance will be added to the result list. By setting the `cancel` variable to `true`, you can stop the search immediatly.</param>
+        /// <param name="fieldsToSearch">The name of the fields to search, this optimises performance and especially memory as you only list the fields you will actively work with. This array can be empty, in which case only the instance index will be given.</param>
+        /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
+        public List<T> FetchFull<T>(Database.CancellableFetchFunc<T> searchFunction)
+        {
+            List<T> result = null;
+            bool cancel = false;
+            using(FileStream file = OpenFileRead())
+            {
+                result = new List<T>((int)((file.Length - (long)headerSize) / (long)instanceSize));
+                ulong instanceID = 0;
+
+                file.Position = headerSize;
+
+                while(file.Position < file.Length)
+                {
+                    T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
+
+                    InstanceOptions options = (InstanceOptions)file.ReadByte();
+
+                    if(options.HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
+                    for(int i = 0; i < infos.Count; i++)
+                    {
+                        byte[] fieldBytes = new byte[infos[i].field.Size + 1];
+                        file.Read(fieldBytes);
+                        
+                        if(infos[i].field.Translator.EndianSensitive)
+                            DBUtils.ToCurrentEndian(fieldBytes, true);
+
+                        object value;
+                        if(infos[i].field.Translator.IsFlexible)
+                            value = infos[i].field.Translator.FlexibleTranslateTo(fieldBytes, infos[i].field.Size);
+                        else
+                            value = infos[i].field.Translator.FixedTranslateTo(fieldBytes);
+                        infos[i].info.SetValue(obj, value);
+                    }
+
+                    if(searchFunction(obj, ref cancel))
+                        result.Add(obj);
+
+                    if(cancel)
+                        break;
+
+                    instanceID++;
+                }
+            }
+            ReleaseRead();
+
+            return result;
+        }
+
+        /// <summary>
+        /// The asynchronous version of the Fetch function. Is is called on every thread and distribute work among them so each thread analyses only part of the file at the same time.
+        /// </summary>
+        /// <param name="searchFunction">A delegate called for each instance, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">The name of the fields to search, this optimises performance and especially memory as you only list the fields you will actively work with. This array can be empty, in which case only the instance index will be given.</param>
+        /// <param name="threadCount">The total amount of threads in the database.</param>
+        /// <param name="threadID">The current thread index.</param>
+        /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
+        public List<T> FetchFull<T>(Database.FetchFunc<T> searchFunction, int threadCount, int threadID)
+        {
+            List<T> result = null;
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
+                out ulong instanceID, out long instancePos, out long realCount, out long endPos);
+                result = new List<T>((int)realCount);
+
+                file.Position = instancePos;
+
+                while(file.Position < file.Length)
+                {
+                    T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
+
+                    InstanceOptions options = (InstanceOptions)file.ReadByte();
+
+                    if(options.HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
+                    for(int i = 0; i < infos.Count; i++)
+                    {
+                        byte[] fieldBytes = new byte[infos[i].field.Size + 1];
+                        file.Read(fieldBytes);
+                        
+                        if(infos[i].field.Translator.EndianSensitive)
+                            DBUtils.ToCurrentEndian(fieldBytes, true);
+
+                        object value;
+                        if(infos[i].field.Translator.IsFlexible)
+                            value = infos[i].field.Translator.FlexibleTranslateTo(fieldBytes, infos[i].field.Size);
+                        else
+                            value = infos[i].field.Translator.FixedTranslateTo(fieldBytes);
+                        infos[i].info.SetValue(obj, value);
+                    }
+
+                    instancePos += (long)instanceSize;
+
+                    if(searchFunction(obj))
+                        result.Add(obj);
+
+                    instanceID++;
+                }
+            }
+            ReleaseRead();
+
+            return result;
+        }
+
+        /// <summary>
+        /// The asynchronous version of the cancellable Fetch function. Is is called on every thread and distribute work among them so each thread analyses only part of the file at the same time.
+        /// </summary>
+        /// <param name="searchFunction">A delegate called for each instance, if it returns true, the instance will be added to the result list.</param>
+        /// <param name="fieldsToSearch">The name of the fields to search, this optimises performance and especially memory as you only list the fields you will actively work with. This array can be empty, in which case only the instance index will be given.</param>
+        /// <param name="threadCount">The total amount of threads in the database.</param>
+        /// <param name="threadID">The current thread index.</param>
+        /// <param name="cancel">The shared cancel variable, when set to true, all threads stop their search. Because of the nature of multithreading, it is possible that some thread read several more instances before stopping.</param>
+        /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
+        public List<T> FetchFull<T>(Database.CancellableFetchFunc<T> searchFunction, int threadCount, int threadID, ref bool cancel)
+        {
+            List<T> result = null;
+            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
+                out ulong instanceID, out long instancePos, out long realCount, out long endPos);
+                result = new List<T>((int)realCount);
+
+                file.Position = instancePos;
+
+                while(file.Position < file.Length)
+                {
+                    T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
+
+                    InstanceOptions options = (InstanceOptions)file.ReadByte();
+
+                    if(options.HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
+                    for(int i = 0; i < infos.Count; i++)
+                    {
+                        byte[] fieldBytes = new byte[infos[i].field.Size + 1];
+                        file.Read(fieldBytes);
+                        
+                        if(infos[i].field.Translator.EndianSensitive)
+                            DBUtils.ToCurrentEndian(fieldBytes, true);
+
+                        object value;
+                        if(infos[i].field.Translator.IsFlexible)
+                            value = infos[i].field.Translator.FlexibleTranslateTo(fieldBytes, infos[i].field.Size);
+                        else
+                            value = infos[i].field.Translator.FixedTranslateTo(fieldBytes);
+                        infos[i].info.SetValue(obj, value);
+                    }
+
+                    instancePos += (long)instanceSize;
+
+                    if(searchFunction(obj, ref cancel))
+                        result.Add(obj);
 
                     if(cancel)
                         break;
