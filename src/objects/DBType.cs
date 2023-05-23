@@ -849,7 +849,7 @@ namespace FuziotDB
 
                 file.Position = instancePos;
 
-                while(instancePos < endPos)
+                while(file.Position < endPos)
                 {
                     if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
                     {
@@ -893,7 +893,7 @@ namespace FuziotDB
                 result = new List<object[]>((int)realCount);
                 file.Position = instancePos;
 
-                while(instancePos < endPos)
+                while(file.Position < endPos)
                 {
                     if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
                     {
