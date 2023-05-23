@@ -693,7 +693,10 @@ namespace FuziotDB
                 if(fetchFields[i].translator.EndianSensitive)
                     DBUtils.ToCurrentEndian(fieldBytes, true);
 
-                values[i + 1] = fetchFields[i].translator.FixedTranslateTo(fieldBytes);
+                if(fetchFields[i].translator.IsFlexible)
+                    values[i + 1] = fetchFields[i].translator.FlexibleTranslateTo(fieldBytes, fetchFields[i].size);
+                else
+                    values[i + 1] = fetchFields[i].translator.FixedTranslateTo(fieldBytes);
             }
 
             return values;
