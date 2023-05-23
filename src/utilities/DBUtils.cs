@@ -120,6 +120,16 @@ namespace FuziotDB
             return result;
         }
 
+        public static int LengthUntilNullChar(this byte[] buffer)
+        {
+            int i;
+            for (i = 0; i < buffer.Length; i++)
+                if(buffer[i] == '\0')
+                    break;
+
+            return i;
+        }
+
         private static readonly byte[] BitCountLookup = new byte[16]
         {
             0, 1, 1, 2, 1, 2, 2, 3,

@@ -27,6 +27,7 @@ namespace FuziotDB
             { typeof(double), Float64Translator.Default },
             { typeof(string),  StringTranslator.Default },
             { typeof(ASCIIS),  ASCIISTranslator.Default },
+            { typeof(UTF8S) ,   UTF8STranslator.Default },
             { typeof(byte[]), ByteArrTranslator.Default }
         };
 
@@ -81,7 +82,7 @@ namespace FuziotDB
         internal override byte[] FixedTranslateFrom(object obj) => throw new Exception("Invalid convert method : this translator has a flexible size, FlexibleConvertFrom() must be called instead.");
         internal override object FixedTranslateTo(byte[] arr) => throw new Exception("Invalid convert method : this translator has a flexible size, FlexibleConvertTo() must be called instead.");
 
-        internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => Serialize((T)obj, (size + 1) / BytesPerElement);
+        internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => Serialize((T)obj, (size + 1) / BytesPerElement).EnsureSize(size + 1);
         internal override object FlexibleTranslateTo(byte[] arr, ushort size) => (object)Deserialize(arr, (size + 1) / BytesPerElement);
 
         public FlexibleTranslator(bool endianSensitive) : base(typeof(T), -1, endianSensitive) { }
@@ -92,7 +93,7 @@ namespace FuziotDB
 
     public abstract class FixedTranslator<T> : TranslatorBase
     {
-        internal override byte[] FixedTranslateFrom(object obj) => Serialize((T)obj);
+        internal override byte[] FixedTranslateFrom(object obj) => Serialize((T)obj).EnsureSize(Size + 1);
         internal override object FixedTranslateTo(byte[] arr) => (object)Deserialize(arr);
 
         internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => throw new Exception("Invalid convert method : this translator has a fixed size, ConvertFrom() must be called instead.");
@@ -256,8 +257,8 @@ namespace FuziotDB
 
         public override byte BytesPerElement => 2;
 
-        public override byte[] Serialize(string obj, int length) => Encoding.Unicode.GetBytes(obj, 0, Math.Min(obj.Length, length)).EnsureSize(length);
-        public override string Deserialize(byte[] data, int length) => Encoding.Unicode.GetString(data, 0, length);
+        public override byte[] Serialize(string obj, int length) => Encoding.Unicode.GetBytes(obj, 0, Math.Min(obj.Length, length * BytesPerElement));
+        public override string Deserialize(byte[] data, int length) => Encoding.Unicode.GetString(data, 0, Math.Min(data.LengthUntilNullChar(), length * BytesPerElement));
     }
 
     public sealed class ASCIISTranslator : FlexibleTranslator<ASCIIS>
@@ -268,8 +269,20 @@ namespace FuziotDB
 
         public override byte BytesPerElement => 1;
 
-        public override byte[] Serialize(ASCIIS obj, int length) => Encoding.ASCII.GetBytes(obj, 0, Math.Min(obj.Length, length)).EnsureSize(length);
-        public override ASCIIS Deserialize(byte[] data, int length) => new ASCIIS(Encoding.ASCII.GetString(data, 0, length));
+        public override byte[] Serialize(ASCIIS obj, int length) => Encoding.ASCII.GetBytes(obj, 0, Math.Min(obj.Length, length * BytesPerElement));
+        public override ASCIIS Deserialize(byte[] data, int length) => new ASCIIS(Encoding.ASCII.GetString(data, 0, Math.Min(data.LengthUntilNullChar(), length * BytesPerElement)));
+    }
+
+    public sealed class UTF8STranslator : FlexibleTranslator<UTF8S>
+    {
+        public static UTF8STranslator Default => new UTF8STranslator();
+
+        public UTF8STranslator() : base(false) { }
+
+        public override byte BytesPerElement => 1;
+
+        public override byte[] Serialize(UTF8S obj, int length) => Encoding.UTF8.GetBytes(obj, 0, Math.Min(obj.Length, length * BytesPerElement));
+        public override UTF8S Deserialize(byte[] data, int length) => new UTF8S(Encoding.UTF8.GetString(data, 0, Math.Min(data.LengthUntilNullChar(), length * BytesPerElement)));
     }
 
     public sealed class ByteArrTranslator : FlexibleTranslator<byte[]>
@@ -280,8 +293,8 @@ namespace FuziotDB
 
         public override byte BytesPerElement => 1;
 
-        public override byte[] Serialize(byte[] obj, int length) => obj.EnsureSize(length);
-        public override byte[] Deserialize(byte[] data, int length) => data.EnsureSize(length);
+        public override byte[] Serialize(byte[] obj, int length) => obj;
+        public override byte[] Deserialize(byte[] data, int length) => data;
     }
 
     #endregion
