@@ -34,6 +34,7 @@ namespace FuziotDB
         private string filePath;
         /// <summary>Whether the type has been registered, in order to avoid using certain methods when the type has been registered.</summary>
         private bool registered;
+        private bool isEmpty;
 
         #region MULTITHREADING
 
@@ -181,6 +182,9 @@ namespace FuziotDB
                 fileSize = file.Length;
 
             registered = true;
+
+            if(!isEmpty)
+                isEmpty = CheckIfEmpty();
         }
 
         /// <summary>
@@ -204,6 +208,8 @@ namespace FuziotDB
                 for(int i = 0; i < infos.Count; i++)
                     file.Write(infos[i].field.CalcHeader());
             }
+
+            isEmpty = true;
         }
 
         /// <summary>
@@ -236,6 +242,15 @@ namespace FuziotDB
         /// Checks whether the database file for this type already exists.
         /// </summary>
         public bool Exists() => File.Exists(filePath);
+
+        private bool CheckIfEmpty()
+        {
+            bool result = false;
+            using(FileStream file = OpenFileRead())
+                result = file.Length <= headerSize;
+            ReleaseRead();
+            return result;
+        }
 
         #endregion
 
@@ -502,6 +517,8 @@ namespace FuziotDB
             File.Move(newFilePath, filePath);
 
             ReleaseWrite();
+
+            isEmpty = CheckIfEmpty();
         }
 
         #endregion
@@ -573,6 +590,9 @@ namespace FuziotDB
 
                 fileSize = file.Length;
             }
+
+            isEmpty = false;
+
             ReleaseWrite();
 
             return offset;
@@ -751,6 +771,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<object[]> Fetch(Database.FetchFunc searchFunction, string[] fieldsToSearch)
         {
+            if(isEmpty)
+                return new List<object[]>();
+
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
@@ -793,6 +816,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<object[]> Fetch(Database.CancellableFetchFunc searchFunction, string[] fieldsToSearch)
         {
+            if(isEmpty)
+                return new List<object[]>();
+
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
@@ -837,6 +863,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<object[]> Fetch(Database.FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
         {
+            if(isEmpty)
+                return new List<object[]>();
+
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
@@ -881,6 +910,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<object[]> Fetch(Database.CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID, ref bool cancel)
         {
+            if(isEmpty)
+                return new List<object[]>();
+
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
@@ -931,6 +963,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<T> FetchFull<T>(Database.FetchFunc<T> searchFunction)
         {
+            if(isEmpty)
+                return new List<T>();
+                
             List<T> result = null;
             using(FileStream file = OpenFileRead())
             {
@@ -988,6 +1023,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<T> FetchFull<T>(Database.CancellableFetchFunc<T> searchFunction)
         {
+            if(isEmpty)
+                return new List<T>();
+                
             List<T> result = null;
             bool cancel = false;
             using(FileStream file = OpenFileRead())
@@ -1047,6 +1085,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<T> FetchFull<T>(Database.FetchFunc<T> searchFunction, int threadCount, int threadID)
         {
+            if(isEmpty)
+                return new List<T>();
+                
             List<T> result = null;
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
@@ -1106,6 +1147,9 @@ namespace FuziotDB
         /// <returns>A list of object array, each object array represents an instance that passed the searchFunction test.</returns>
         public List<T> FetchFull<T>(Database.CancellableFetchFunc<T> searchFunction, int threadCount, int threadID, ref bool cancel)
         {
+            if(isEmpty)
+                return new List<T>();
+                
             List<T> result = null;
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
@@ -1171,6 +1215,9 @@ namespace FuziotDB
         /// <returns>How many instances passed the test.</returns>
         public long FetchCount(Database.FetchFunc searchFunction, params string[] fieldsToSearch)
         {
+            if(isEmpty)
+                return 0;
+                
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
@@ -1210,6 +1257,9 @@ namespace FuziotDB
         /// <returns>How many instances passed the test.</returns>
         public long FetchCount(Database.CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
         {
+            if(isEmpty)
+                return 0;
+                
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
@@ -1253,6 +1303,9 @@ namespace FuziotDB
         /// <returns>How many instances passed the test.</returns>
         public long FetchCount(Database.FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
         {
+            if(isEmpty)
+                return 0;
+                
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
@@ -1296,6 +1349,9 @@ namespace FuziotDB
         /// <returns>How many instances passed the test.</returns>
         public long FetchCount(Database.CancellableFetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID, ref bool cancel)
         {
+            if(isEmpty)
+                return 0;
+                
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
