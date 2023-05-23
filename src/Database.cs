@@ -86,7 +86,7 @@ namespace FuziotDB
                             }
 
                             action.Execute(this, threadCount, index, this.currentInfo);
-                            
+
                             //Console.WriteLine(string.Concat("Thread ", index, " finished with ", ((FetchResult)this.threads[index].Result).result.Count, " objects"));
                         }
                     });
@@ -247,7 +247,7 @@ namespace FuziotDB
                     alias = new ASCIIS(info.Name);
                 }
 
-                Field field = new Field(alias, translator.IsFlexible ? (ushort)(attribute.Length - 1) : translator.Size, translator);
+                Field field = new Field(alias, translator.IsFlexible ? (ushort)(attribute.Length * translator.BytesPerElement - 1) : translator.Size, translator);
 
                 obj.Add(info, field);
             }

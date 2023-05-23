@@ -57,6 +57,16 @@ namespace FuziotDB
             }
         }
 
+        /// <summary>
+        /// How many bytes each elements has. For example, when serializing an UTF-16 string, BytesPerElement would be equal to 2. While a byte array
+        /// or an ASCII string, will have BytesPerElement equal to 1, an int array will have it at 4.
+        /// <br></br>
+        /// This is used because <see cref="Serialize"/> and <see cref="Deserialize"/> are using a length (how many elements) and not a size 
+        /// (how many bytes - 1) to make it easier to use.
+        /// </summary>
+        /// <value></value>
+        public abstract byte BytesPerElement { get; }
+
         internal bool ValidType(Type type) => this.type == type;
 
         internal abstract byte[] FixedTranslateFrom(object obj);
@@ -71,8 +81,8 @@ namespace FuziotDB
         internal override byte[] FixedTranslateFrom(object obj) => throw new Exception("Invalid convert method : this translator has a flexible size, FlexibleConvertFrom() must be called instead.");
         internal override object FixedTranslateTo(byte[] arr) => throw new Exception("Invalid convert method : this translator has a flexible size, FlexibleConvertTo() must be called instead.");
 
-        internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => Serialize((T)obj, size + 1);
-        internal override object FlexibleTranslateTo(byte[] arr, ushort size) => (object)Deserialize(arr, size + 1);
+        internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => Serialize((T)obj, (size + 1) / BytesPerElement);
+        internal override object FlexibleTranslateTo(byte[] arr, ushort size) => (object)Deserialize(arr, (size + 1) / BytesPerElement);
 
         public FlexibleTranslator(bool endianSensitive) : base(typeof(T), -1, endianSensitive) { }
 
@@ -87,6 +97,8 @@ namespace FuziotDB
 
         internal override byte[] FlexibleTranslateFrom(object obj, ushort size) => throw new Exception("Invalid convert method : this translator has a fixed size, ConvertFrom() must be called instead.");
         internal override object FlexibleTranslateTo(byte[] arr, ushort size) => throw new Exception("Invalid convert method : this translator has a fixed size, ConvertTo() must be called instead.");
+
+        public override byte BytesPerElement => 0;
 
         public FixedTranslator(int byteCount, bool endianSensitive) : base(typeof(T), byteCount, endianSensitive) { }
 
@@ -242,7 +254,9 @@ namespace FuziotDB
 
         public StringTranslator() : base(false) { }
 
-        public override byte[] Serialize(string obj, int length) => Encoding.Unicode.GetBytes(obj, 0, length);
+        public override byte BytesPerElement => 2;
+
+        public override byte[] Serialize(string obj, int length) => Encoding.Unicode.GetBytes(obj, 0, Math.Min(obj.Length, length)).EnsureSize(length);
         public override string Deserialize(byte[] data, int length) => Encoding.Unicode.GetString(data, 0, length);
     }
 
@@ -252,7 +266,9 @@ namespace FuziotDB
 
         public ASCIISTranslator() : base(false) { }
 
-        public override byte[] Serialize(ASCIIS obj, int length) => Encoding.ASCII.GetBytes(obj, 0, length);
+        public override byte BytesPerElement => 1;
+
+        public override byte[] Serialize(ASCIIS obj, int length) => Encoding.ASCII.GetBytes(obj, 0, Math.Min(obj.Length, length)).EnsureSize(length);
         public override ASCIIS Deserialize(byte[] data, int length) => new ASCIIS(Encoding.ASCII.GetString(data, 0, length));
     }
 
@@ -261,6 +277,8 @@ namespace FuziotDB
         public static ByteArrTranslator Default => new ByteArrTranslator();
 
         public ByteArrTranslator() : base(false) { }
+
+        public override byte BytesPerElement => 1;
 
         public override byte[] Serialize(byte[] obj, int length) => obj.EnsureSize(length);
         public override byte[] Deserialize(byte[] data, int length) => data.EnsureSize(length);
