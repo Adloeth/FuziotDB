@@ -86,8 +86,6 @@ namespace FuziotDB
                             }
 
                             action.Execute(this, threadCount, index, this.currentInfo);
-
-                            //Console.WriteLine(string.Concat("Thread ", index, " finished with ", ((FetchResult)this.threads[index].Result).result.Count, " objects"));
                         }
                     });
                     threads[i].Start();
