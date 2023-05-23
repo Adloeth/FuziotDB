@@ -199,7 +199,7 @@ namespace FuziotDB
         /// to add, remove, search and count instances in the database.
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        public void Register<T>() where T : new() => Register(typeof(T), false);
+        public void Register<T>() => Register(typeof(T), false);
         /// <summary>
         /// Registers an type to the database. This will create a file for each type. Once registered you can use other methods of the database class
         /// to add, remove, search and count instances in the database.
@@ -211,7 +211,7 @@ namespace FuziotDB
         /// parameter to true.
         /// </param>
         /// <typeparam name="T"></typeparam>
-        public void Register<T>(bool upgrade) where T : new() => Register(typeof(T), upgrade);
+        public void Register<T>(bool upgrade) => Register(typeof(T), upgrade);
 
         private void Register(Type type, bool upgrade)
         {
@@ -394,7 +394,7 @@ namespace FuziotDB
         /// </summary>
         /// <param name="instance"></param>
         /// <typeparam name="T"></typeparam>
-        public void Push<T>(T instance) where T : new() => Push(typeof(T), instance);
+        public void Push<T>(T instance) => Push(typeof(T), instance);
         private void Push(Type type, object instance)
             => WaitForActionDone().GetDBType(type).Push(instance);
 
@@ -408,7 +408,7 @@ namespace FuziotDB
         /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
         /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
         /// <returns>A list of all instances that passed the test in the search function.</returns>
-        public List<object[]> Fetch<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Fetch(typeof(T), searchFunction, fieldsToSearch);
+        public List<object[]> Fetch<T>(FetchFunc searchFunction, params string[] fieldsToSearch) => Fetch(typeof(T), searchFunction, fieldsToSearch);
         private List<object[]> Fetch(Type type, FetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetDBType(type).Fetch(searchFunction, fieldsToSearch);
 
@@ -419,7 +419,7 @@ namespace FuziotDB
         /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
         /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
         /// <returns>A list of all instances that passed the test in the search function.</returns>
-        public List<object[]> Fetch<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Fetch(typeof(T), searchFunction, fieldsToSearch);
+        public List<object[]> Fetch<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) => Fetch(typeof(T), searchFunction, fieldsToSearch);
         private List<object[]> Fetch(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetDBType(type).Fetch(searchFunction, fieldsToSearch);
 
@@ -462,7 +462,7 @@ namespace FuziotDB
         /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
         /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
         /// <returns>How many instances passed the test in the search function.</returns>
-        public long Count<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Count(typeof(T), searchFunction, fieldsToSearch);
+        public long Count<T>(FetchFunc searchFunction, params string[] fieldsToSearch) => Count(typeof(T), searchFunction, fieldsToSearch);
         private long Count(Type type, FetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetDBType(type).FetchCount(searchFunction, fieldsToSearch);
 
@@ -473,7 +473,7 @@ namespace FuziotDB
         /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
         /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
         /// <returns>How many instances passed the test in the search function.</returns>
-        public long Count<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new() => Count(typeof(T), searchFunction, fieldsToSearch);
+        public long Count<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) => Count(typeof(T), searchFunction, fieldsToSearch);
         private long Count(Type type, CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => WaitForActionDone().GetDBType(type).FetchCount(searchFunction, fieldsToSearch);
 
@@ -485,7 +485,7 @@ namespace FuziotDB
         /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
         /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
         /// <returns>How many instances passed the test in the search function.</returns>
-        public CountAsyncInfo CountAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch) where T : new()
+        public CountAsyncInfo CountAsync<T>(FetchFunc searchFunction, params string[] fieldsToSearch)
             => (CountAsyncInfo)StartThreads(new FetchCountAction(typeof(T), searchFunction, fieldsToSearch));
 
         /// <summary>
@@ -495,7 +495,7 @@ namespace FuziotDB
         /// <param name="searchFunction">Called for each instance in the database, if it returns true, the instance will be added to the result list.</param>
         /// <param name="fieldsToSearch">Fields to return and pass to the search function.</param>
         /// <returns>How many instances passed the test in the search function.</returns>
-        public CountAsyncInfo CountAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch) where T : new()
+        public CountAsyncInfo CountAsync<T>(CancellableFetchFunc searchFunction, params string[] fieldsToSearch)
             => (CountAsyncInfo)StartThreads(new CancellableFetchCountAction(typeof(T), searchFunction, fieldsToSearch));
 
         private long Count(Type type, FetchFunc searchFunction, string[] fieldsToSearch, int threadCount, int threadID)
