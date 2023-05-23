@@ -688,7 +688,7 @@ namespace FuziotDB
 
             for(int i = 0; i < fetchFields.Length; i++)
             {
-                byte[] fieldBytes = instanceBytes.Extract(fetchFields[i].offset, fetchFields[i].size + 1);
+                byte[] fieldBytes = instanceBytes.Extract(fetchFields[i].offset - 1, fetchFields[i].size + 1);
 
                 if(fetchFields[i].translator.EndianSensitive)
                     DBUtils.ToCurrentEndian(fieldBytes, true);
