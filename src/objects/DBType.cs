@@ -943,9 +943,7 @@ namespace FuziotDB
                 {
                     T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
 
-                    InstanceOptions options = (InstanceOptions)file.ReadByte();
-
-                    if(options.HasFlag(InstanceOptions.Deleted))
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
                     {
                         file.Position += (long)instanceSize - 1;
                         continue;
@@ -1003,9 +1001,7 @@ namespace FuziotDB
                 {
                     T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
 
-                    InstanceOptions options = (InstanceOptions)file.ReadByte();
-
-                    if(options.HasFlag(InstanceOptions.Deleted))
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
                     {
                         file.Position += (long)instanceSize - 1;
                         continue;
@@ -1064,9 +1060,7 @@ namespace FuziotDB
                 {
                     T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
 
-                    InstanceOptions options = (InstanceOptions)file.ReadByte();
-
-                    if(options.HasFlag(InstanceOptions.Deleted))
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
                     {
                         file.Position += (long)instanceSize - 1;
                         continue;
@@ -1125,9 +1119,7 @@ namespace FuziotDB
                 {
                     T obj = (T)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(type);;
 
-                    InstanceOptions options = (InstanceOptions)file.ReadByte();
-
-                    if(options.HasFlag(InstanceOptions.Deleted))
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
                     {
                         file.Position += (long)instanceSize - 1;
                         continue;
@@ -1184,14 +1176,18 @@ namespace FuziotDB
             long result = 0;
             using(FileStream file = OpenFileRead())
             {
-                long instancePos = headerSize;
+                file.Position = headerSize;
                 ulong instanceID = 0;
 
                 while(file.Position < file.Length)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+                    
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values))
                         result++;
@@ -1219,15 +1215,19 @@ namespace FuziotDB
             long result = 0;
             using(FileStream file = OpenFileRead())
             {
-                long instancePos = headerSize;
+                file.Position = headerSize;
                 ulong instanceID = 0;
                 bool cancel = false;
 
                 while(file.Position < file.Length)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values, ref cancel))
                         result++;
@@ -1262,11 +1262,17 @@ namespace FuziotDB
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
                 out ulong instanceID, out long instancePos, out long realCount, out long endPos);
 
-                while(instancePos < endPos)
+                file.Position = instancePos;
+
+                while(file.Position < endPos)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values))
                         result++;
@@ -1299,11 +1305,17 @@ namespace FuziotDB
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
                 out ulong instanceID, out long instancePos, out long realCount, out long endPos);
 
-                while(instancePos < endPos)
+                file.Position = instancePos;
+
+                while(file.Position < endPos)
                 {
-                    file.Position = instancePos;
+                    if(((InstanceOptions)file.ReadByte()).HasFlag(InstanceOptions.Deleted))
+                    {
+                        file.Position += (long)instanceSize - 1;
+                        continue;
+                    }
+
                     object[] values = GetInstanceFieldValues(file, instanceID, fetchFields);
-                    instancePos += (long)instanceSize;
 
                     if(searchFunction(values, ref cancel))
                         result++;
