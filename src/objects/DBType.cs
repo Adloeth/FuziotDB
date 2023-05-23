@@ -1,8 +1,7 @@
 using System;
 using System.IO;
-using System.Reflection;
+using System.Threading;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 
 namespace FuziotDB
@@ -35,6 +34,13 @@ namespace FuziotDB
         /// <summary>Whether the type has been registered, in order to avoid using certain methods when the type has been registered.</summary>
         private bool registered;
 
+        #region MULTITHREADING
+
+        private bool isWriting;
+        private int threadsReading;
+
+        #endregion
+
         #endregion
 
         #region PROPERTIES
@@ -43,6 +49,9 @@ namespace FuziotDB
         public int FieldCount => infos.Count;
         /// <inheritdoc cref="filePath"/>
         public string FilePath => filePath;
+
+        public bool IsReading => threadsReading > 0;
+        public bool IsWriting => isWriting;
 
         #endregion
 
@@ -69,6 +78,81 @@ namespace FuziotDB
 
         #endregion
 
+        #region FILE STREAMS
+
+        /// <summary>
+        /// Lock for reading (see <see cref="LockRead"/>) and opens the type file so that it can read from it.
+        /// </summary>
+        private FileStream OpenFileRead()
+        {
+            LockRead();
+            return File.Open(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        }
+
+        /// <summary>
+        /// Lock for writing (see <see cref="LockWrite"/>) and opens the type file so that it can write to it.
+        /// </summary>
+        private FileStream OpenFileWrite()
+        {
+            LockWrite();
+            return File.Open(FilePath, FileMode.Open, FileAccess.Write, FileShare.None);
+        }
+
+        /// <summary>
+        /// Lock for writing (see <see cref="LockWrite"/>) and opens the type file so that it can read and write at the same time.
+        /// </summary>
+        private FileStream OpenFileReadWrite()
+        {
+            LockWrite();
+            return File.Open(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        }
+
+        /// <summary>
+        /// Waits for all threads writing to the file to finish.
+        /// This is made so that only one thread can write at any time and no threads can read while another thread is writing to avoid conflicts while searching or writing.
+        /// <br></br>
+        /// Don't forget to call <see cref="ReleaseRead"/> when the work is done.
+        /// </summary>
+        private void LockRead()
+        {
+            while(isWriting);
+
+            threadsReading++;
+        }
+
+        /// <summary>
+        /// Waits for all threads writing to the file to finish, then claims that this thread is writing and waits for any reading threads to finish.
+        /// This is made so that only one thread can write at any time and no threads can read while another thread is writing to avoid conflicts while searching or writing.
+        /// <br></br>
+        /// Don't forget to call <see cref="ReleaseWrite"/> when the work is done.
+        /// </summary>
+        private void LockWrite()
+        {
+            while(isWriting);
+
+            isWriting = true;
+
+            while(IsReading);
+        }
+
+        /// <summary>
+        /// <see cref="LockRead"/>
+        /// </summary>
+        private void ReleaseRead()
+        {
+            threadsReading--;
+        }
+
+        /// <summary>
+        /// <see cref="LockWrite"/>
+        /// </summary>
+        private void ReleaseWrite()
+        {
+            isWriting = false;
+        }
+
+        #endregion
+
         #region REGISTER
 
         /// <summary>
@@ -82,9 +166,9 @@ namespace FuziotDB
                 throw new Exception("Cannot add a field to the DBType when it is registered.");
 
             infos.Add(new FieldInfo(field, info));
-            //1B Type ; 1B Name size ; xB ASCII Name ; 2B Field size
-            headerSize += 1u + 1u + (uint)field.Name.Length + 2u;
-            this.instanceSize += field.Size;
+            //1B Name size ; xB ASCII Name ; 2B Field size
+            headerSize += 1u + (uint)field.Name.Length + 2u;
+            this.instanceSize += (ulong)(field.Size + 1);
         }
 
         /// <summary>
@@ -266,8 +350,9 @@ namespace FuziotDB
         public bool IsHeaderValid()
         {
             byte[] header;
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            using(FileStream file = OpenFileRead())
                 header = GetFileFullHeader(file);
+            ReleaseRead();
 
             Field[] fields = Field.FromHeader(header);
 
@@ -305,7 +390,7 @@ namespace FuziotDB
         {
             freeIDs.AddRange(ids);
 
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+            using(FileStream file = OpenFileWrite())
             {
                 for (int i = 0; i < ids.Length; i++)
                 {
@@ -315,6 +400,7 @@ namespace FuziotDB
                     file.WriteByte((byte)(options | InstanceOptions.Deleted));   
                 }
             }
+            ReleaseWrite();
         }
         /// <summary>
         /// Sets the Deleted flag of the specified instances and add them to the queue of available indexes for later allocations to avoid fragmentation.
@@ -324,13 +410,14 @@ namespace FuziotDB
         {
             freeIDs.Add(id);
 
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            using(FileStream file = OpenFileWrite())
             {
                 file.Position = (long)(headerSize + id * instanceSize);
                 InstanceOptions options = (InstanceOptions)file.ReadByte();
                 file.Position--;
                 file.WriteByte((byte)(options | InstanceOptions.Deleted));
             }
+            ReleaseWrite();
         }
 
         /// <summary>
@@ -338,7 +425,9 @@ namespace FuziotDB
         /// </summary>
         public void GetFreedIDs()
         {
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            Console.WriteLine("Instance size: " + instanceSize);
+            Console.WriteLine("Header size: " + headerSize);
+            using(FileStream file = OpenFileRead())
             {
                 file.Position = headerSize;
 
@@ -348,11 +437,21 @@ namespace FuziotDB
                     InstanceOptions options = (InstanceOptions)file.ReadByte();
 
                     if(options.HasFlag(InstanceOptions.Deleted))
+                    {
                         freeIDs.Add(id);
+                        Console.WriteLine("Free ID index: " + (file.Position - 1));
+                    }
 
                     file.Position += (long)instanceSize - 1;
                     id++;
                 }
+            }
+            ReleaseRead();
+
+            Console.WriteLine("There are " + freeIDs.Count + " free ids.");
+            for (int i = 0; i < freeIDs.Count; i++)
+            {
+                Console.WriteLine(freeIDs[i]);
             }
         }
 
@@ -366,7 +465,7 @@ namespace FuziotDB
         /// </summary>
         public void PurgeKeep()
         {
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+            using(FileStream file = OpenFileWrite())
             {
                 for (int i = 0; i < freeIDs.Count; i++)
                 {
@@ -374,6 +473,7 @@ namespace FuziotDB
                     file.Write(new byte[instanceSize - 1]);
                 }
             }
+            ReleaseWrite();
         }
 
         /// <summary>
@@ -383,7 +483,7 @@ namespace FuziotDB
         {
             string newFilePath = string.Concat(filePath, ".tmp");
 
-            using(FileStream oldFile = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using(FileStream oldFile = OpenFileReadWrite())
             {
                 using(FileStream newFile = File.Open(newFilePath, FileMode.Open, FileAccess.Write, FileShare.Write))
                 {
@@ -408,6 +508,8 @@ namespace FuziotDB
 
             File.Delete(filePath);
             File.Move(newFilePath, filePath);
+
+            ReleaseWrite();
         }
 
         #endregion
@@ -421,15 +523,17 @@ namespace FuziotDB
         /// </summary>
         /// <param name="offset">The position in bytes where the instance bytes must be written.</param>
         /// <returns>False if there are no position in the middle of the file where data can be written. True otherwise.</returns>
-        private bool Alloc(out ulong offset)
+        private bool Alloc(out ulong id, out ulong offset)
         {
             if(freeIDs.Count <= 0)
             {
                 offset = 0;
+                id = 0;
                 return false;
             }
 
-            offset = freeIDs[0];
+            id = freeIDs[0];
+            offset = headerSize + id * instanceSize;
             freeIDs.RemoveAt(0);
             return true;
         }
@@ -441,9 +545,10 @@ namespace FuziotDB
         /// <returns>The position in bytes where the instance has been written.</returns>
         public ulong Push(object instance)
         {
-            bool inMiddle = Alloc(out ulong offset);
+            LockWrite();
+            bool inMiddle = Alloc(out ulong id, out ulong offset);
 
-            using(FileStream file = File.Open(filePath, inMiddle ? FileMode.Open : FileMode.Append, FileAccess.Write))
+            using(FileStream file = File.Open(filePath, inMiddle ? FileMode.Open : FileMode.Append, FileAccess.Write, FileShare.None))
             {            
                 if(inMiddle)
                 {
@@ -454,6 +559,8 @@ namespace FuziotDB
                 }
                 else
                     offset = (ulong)file.Length;
+
+                Console.WriteLine(inMiddle + " " + offset);
 
                 //Write default instance options
                 file.WriteByte((byte)InstanceOptions.None);
@@ -476,6 +583,7 @@ namespace FuziotDB
 
                 fileSize = file.Length;
             }
+            ReleaseWrite();
 
             return offset;
         }
@@ -491,7 +599,7 @@ namespace FuziotDB
         /// <param name="instance">The type instance, it must have the exact same type as the DBObject type.</param>
         public void Set(ulong id, object instance)
         {
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Write))
+            using(FileStream file = OpenFileWrite())
             {
                 long pos = (long)(headerSize + id * instanceSize);
                 if(pos > file.Length)
@@ -515,6 +623,7 @@ namespace FuziotDB
                     file.Write(bytes);
                 }
             }
+            ReleaseWrite();
         }
 
         #endregion
@@ -652,7 +761,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            using(FileStream file = OpenFileRead())
             {
                 result = new List<object[]>((int)((file.Length - (long)headerSize) / (long)instanceSize));
                 long instancePos = headerSize;
@@ -670,6 +779,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -689,7 +799,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            using(FileStream file = OpenFileRead())
             {
                 result = new List<object[]>((int)((file.Length - (long)headerSize) / (long)instanceSize));
                 long objectPos = headerSize;
@@ -711,6 +821,7 @@ namespace FuziotDB
                     objectID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -728,6 +839,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
+            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -746,6 +858,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -764,6 +877,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
+            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -786,6 +900,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -807,7 +922,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            using(FileStream file = OpenFileRead())
             {
                 long instancePos = headerSize;
                 ulong instanceID = 0;
@@ -824,6 +939,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -841,7 +957,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
-            using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            using(FileStream file = OpenFileRead())
             {
                 long instancePos = headerSize;
                 ulong instanceID = 0;
@@ -862,6 +978,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -879,6 +996,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
+            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -896,6 +1014,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
@@ -914,6 +1033,7 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
+            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -934,6 +1054,7 @@ namespace FuziotDB
                     instanceID++;
                 }
             }
+            ReleaseRead();
 
             return result;
         }
