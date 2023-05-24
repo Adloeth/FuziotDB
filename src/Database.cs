@@ -79,13 +79,10 @@ namespace FuziotDB
                             if(action == null)
                                 continue;
 
-                            if(!types.TryGetValue(action.type, out DBType obj))
-                            {
-                                Console.WriteLine(string.Concat("Type '", action.type.FullName, "' wasn't registered."));
-                                continue;
-                            }
+                            action.Execute(this, threadCount, index, currentInfo);
 
-                            action.Execute(this, threadCount, index, this.currentInfo);
+                            while(!currentInfo.IsFinished); // Wait for all threads to finish
+                            threadLock.Reset();
                         }
                     });
                     threads[i].Start();
@@ -146,7 +143,7 @@ namespace FuziotDB
 
             cancel = false;
 
-            this.currentInfo = action.GenerateInfo(threads.Length);
+            currentInfo = action.GenerateInfo(threads.Length);
 
             for(int i = 0; i < threads.Length; i++)
                 threads[i].IsAvailable = false;
@@ -154,9 +151,8 @@ namespace FuziotDB
             this.action = action;
 
             threadLock.Set();
-            threadLock.Reset();
 
-            return this.currentInfo;
+            return currentInfo;
         }
 
         #endregion

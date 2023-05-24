@@ -869,7 +869,6 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
-            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -897,7 +896,6 @@ namespace FuziotDB
                     }
                 }
             }
-            ReleaseRead();
 
             return result;
         }
@@ -919,7 +917,6 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             List<object[]> result = null;
-            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -950,8 +947,7 @@ namespace FuziotDB
                     }
                 }
             }
-            ReleaseRead();
-
+            
             return result;
         }
 
@@ -1140,7 +1136,6 @@ namespace FuziotDB
                     }
                 }
             }
-            ReleaseRead();
 
             return result;
         }
@@ -1208,7 +1203,6 @@ namespace FuziotDB
                     }
                 }
             }
-            ReleaseRead();
 
             return result;
         }
@@ -1321,7 +1315,6 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
-            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -1348,7 +1341,6 @@ namespace FuziotDB
                     }
                 }
             }
-            ReleaseRead();
 
             return result;
         }
@@ -1370,7 +1362,6 @@ namespace FuziotDB
             FetchField[] fetchFields = GetFetchFields(fieldsToSearch);
 
             long result = 0;
-            LockRead();
             using(FileStream file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 GetAsyncFetchThreadInfo(file.Length, threadCount, threadID, 
@@ -1400,7 +1391,6 @@ namespace FuziotDB
                     }
                 }
             }
-            ReleaseRead();
 
             return result;
         }

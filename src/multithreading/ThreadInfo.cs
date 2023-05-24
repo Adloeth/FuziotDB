@@ -48,8 +48,11 @@ namespace FuziotDB
 
         internal override void SetResult(int i, List<object[]> result) 
         { 
-            results[i] = result; 
-            finishedCount++;
+            lock(results)
+            {
+                results[i] = result;
+                finishedCount++;
+            }
         }
     }
 
