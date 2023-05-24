@@ -9,14 +9,14 @@ namespace FuziotDB
         private Thread thread;
         private bool available;
         private bool closing;
-        private ManualResetEvent mutex;
+        private ManualResetEventSlim resetEvent;
 
         public bool IsAvailable { get => available; set => available = value; }
         public bool Closing => closing;
 
-        public DBThread(ManualResetEvent mutex, ThreadStart start)
+        public DBThread(ManualResetEventSlim resetEvent, ThreadStart start)
         {
-            this.mutex = mutex;
+            this.resetEvent = resetEvent;
             thread = new Thread(start);
         }
 
@@ -28,7 +28,7 @@ namespace FuziotDB
         public void Dispose()
         {
             closing = true;
-            mutex.Set();
+            resetEvent.Set();
             thread.Join();
         }
     }

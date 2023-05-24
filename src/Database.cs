@@ -22,7 +22,8 @@ namespace FuziotDB
         #region MULTITHREADING
 
         private DBThread[] threads;
-        private ManualResetEvent threadLock;
+        private ManualResetEventSlim threadLock;
+        private ManualResetEventSlim actionDoneLock;
         private DatabaseAction action;
         private ThreadInfoBase currentInfo;
 
@@ -33,19 +34,6 @@ namespace FuziotDB
         #region PROPERTIES
 
         public bool IsMultithreadedCompatible => threads != null;
-
-        public bool ActionDone
-        {
-            get
-            {
-                for (int i = 0; i < threads.Length; i++)
-                    if(!threads[i].IsAvailable)
-                        return false;
-
-                action = null;
-                return true;
-            }
-        }
 
         #endregion
 
@@ -60,7 +48,8 @@ namespace FuziotDB
             if(threadCount > 0)
             {
                 threads = new DBThread[threadCount];
-                threadLock = new ManualResetEvent(false);
+                threadLock = new ManualResetEventSlim(false);
+                actionDoneLock = new ManualResetEventSlim(true);
 
                 for (int i = 0; i < threadCount; i++)
                 {
@@ -71,7 +60,7 @@ namespace FuziotDB
                         {
                             threads[index].IsAvailable = true;
 
-                            threadLock.WaitOne();
+                            threadLock.Wait();
 
                             if(threads[index].Closing)
                                 break;
@@ -81,8 +70,10 @@ namespace FuziotDB
 
                             action.Execute(this, threadCount, index, currentInfo);
 
-                            while(!currentInfo.IsFinished); // Wait for all threads to finish
+                            currentInfo.WaitUntilFinished(); // Wait for all threads to finish
                             threadLock.Reset();
+
+                            actionDoneLock.Set();
                         }
                     });
                     threads[i].Start();
@@ -124,7 +115,7 @@ namespace FuziotDB
         public Database WaitForActionDone()
         {
             if(IsMultithreadedCompatible)
-                while(!ActionDone);
+                actionDoneLock.Wait();
 
             return this;
         }
@@ -139,7 +130,7 @@ namespace FuziotDB
             if(!IsMultithreadedCompatible)
                 throw new Exception("Cannot use multithreading on this database.");
 
-            while(!ActionDone);
+            actionDoneLock.Wait();
 
             cancel = false;
 
@@ -147,6 +138,8 @@ namespace FuziotDB
 
             for(int i = 0; i < threads.Length; i++)
                 threads[i].IsAvailable = false;
+
+            actionDoneLock.Reset();
 
             this.action = action;
 

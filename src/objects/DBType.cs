@@ -40,6 +40,8 @@ namespace FuziotDB
 
         private bool isWriting;
         private int threadsReading;
+        private ManualResetEventSlim writingEvent;
+        private ManualResetEventSlim readingEvent;
 
         #endregion
 
@@ -53,7 +55,7 @@ namespace FuziotDB
         public string FilePath => filePath;
 
         public bool IsReading => threadsReading > 0;
-        public bool IsWriting => isWriting;
+        public bool IsWriting => !writingEvent.IsSet;
         public bool IsEmpty => count <= 0;
         public ulong Count => count;
 
@@ -65,6 +67,9 @@ namespace FuziotDB
         {
             this.type = type;
             string name = type.Name.PascalToSnake();
+
+            writingEvent = new ManualResetEventSlim(true);
+            readingEvent = new ManualResetEventSlim(true);
 
             if(string.IsNullOrWhiteSpace(name))
                 throw new Exception(string.Concat("File name '", name, "' is invalid."));
@@ -119,7 +124,9 @@ namespace FuziotDB
         /// </summary>
         private void LockRead()
         {
-            while(isWriting);
+            writingEvent.Wait();
+
+            readingEvent.Set();
 
             threadsReading++;
         }
@@ -132,11 +139,11 @@ namespace FuziotDB
         /// </summary>
         private void LockWrite()
         {
-            while(isWriting);
+            writingEvent.Wait();
 
-            isWriting = true;
+            writingEvent.Reset();
 
-            while(IsReading);
+            readingEvent.Wait();
         }
 
         /// <summary>
@@ -145,6 +152,8 @@ namespace FuziotDB
         private void ReleaseRead()
         {
             threadsReading--;
+            if(threadsReading <= 0)
+                readingEvent.Set();
         }
 
         /// <summary>
@@ -152,7 +161,7 @@ namespace FuziotDB
         /// </summary>
         private void ReleaseWrite()
         {
-            isWriting = false;
+            writingEvent.Set();
         }
 
         #endregion
